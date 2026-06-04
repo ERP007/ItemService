@@ -8,83 +8,63 @@ pipeline {
 
     environment {
         SERVICE_NAME = 'item-service'
-        TAG_KEY = 'ITEM_SERVICE_TAG'
-        IMAGE_NAME = 'ghcr.io/erp007/item-service'
-        INFRA_REPO = 'https://github.com/ERP007/Infra.git'
-        GIT_COMMITTER_NAME = 'erp007-jenkins'
-        GIT_COMMITTER_EMAIL = 'jenkins@erp007.xyz'
+        SERVICE_DIR = '/home/taehyung/apps/msa-server/item-service'
+        INFRA_DIR = '/home/taehyung/apps/msa-server/infra'
+        COMPOSE_FILE = 'docker-compose.yml'
+        COMPOSE_PROJECT = 'msa-server'
+        API_BASE_URL = 'https://api.erp007.xyz'
     }
 
     stages {
-        stage('Prepare') {
-            steps {
-                script {
-                    env.IMAGE_TAG = "sha-${env.GIT_COMMIT.take(12)}"
-                }
-            }
-        }
-
         stage('Test and package') {
             steps {
-                sh 'docker build --target build -t ${IMAGE_NAME}:build-${IMAGE_TAG} .'
+                sh 'docker build --target build -t "erp007-ci-check-${SERVICE_NAME}:${BUILD_NUMBER}" .'
             }
         }
 
-        stage('Build image') {
-            steps {
-                sh 'docker build -t ${IMAGE_NAME}:${IMAGE_TAG} -t ${IMAGE_NAME}:main .'
-            }
-        }
-
-        stage('Push image') {
-            when { branch 'main' }
-            steps {
-                withCredentials([usernamePassword(credentialsId: 'ghcr-kt-packages', usernameVariable: 'GHCR_USERNAME', passwordVariable: 'GHCR_TOKEN')]) {
-                    sh '''
-                        set -eu
-                        printf '%s' "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USERNAME" --password-stdin
-                        docker push "${IMAGE_NAME}:${IMAGE_TAG}"
-                        docker push "${IMAGE_NAME}:main"
-                    '''
-                }
-            }
-        }
-
-        stage('Update infra image tag') {
+        stage('Sync server repos') {
             when { branch 'main' }
             steps {
                 withCredentials([usernamePassword(credentialsId: 'github-kt-jenkins-pat', usernameVariable: 'GITHUB_USERNAME', passwordVariable: 'GITHUB_TOKEN')]) {
                     sh '''
                         set -eu
-                        rm -rf .ci-infra
-
                         auth_header="$(printf '%s:%s' "$GITHUB_USERNAME" "$GITHUB_TOKEN" | base64 | tr -d '\\n')"
-                        git -c "http.extraHeader=Authorization: Basic ${auth_header}" clone "$INFRA_REPO" .ci-infra
 
-                        cd .ci-infra
-                        git config user.name "$GIT_COMMITTER_NAME"
-                        git config user.email "$GIT_COMMITTER_EMAIL"
+                        cd "$INFRA_DIR"
+                        git -c "http.extraHeader=Authorization: Basic ${auth_header}" fetch origin main
+                        git checkout main
+                        git -c "http.extraHeader=Authorization: Basic ${auth_header}" pull --ff-only origin main
 
-                        tmp_file="$(mktemp)"
-
-                        if grep -q "^${TAG_KEY}=" server-images.env; then
-                            sed "s|^${TAG_KEY}=.*|${TAG_KEY}=${IMAGE_TAG}|" server-images.env > "$tmp_file"
-                        else
-                            cp server-images.env "$tmp_file"
-                            printf '\\n%s=%s\\n' "$TAG_KEY" "$IMAGE_TAG" >> "$tmp_file"
-                        fi
-
-                        mv "$tmp_file" server-images.env
-
-                        if git diff --quiet -- server-images.env; then
-                            echo "server-images.env already points ${TAG_KEY} at ${IMAGE_TAG}"
-                        else
-                            git add server-images.env
-                            git commit -m "ci: deploy ${SERVICE_NAME} ${IMAGE_TAG}"
-                            git push origin main
-                        fi
+                        cd "$SERVICE_DIR"
+                        git -c "http.extraHeader=Authorization: Basic ${auth_header}" fetch origin main
+                        git checkout main
+                        git -c "http.extraHeader=Authorization: Basic ${auth_header}" pull --ff-only origin main
                     '''
                 }
+            }
+        }
+
+        stage('Deploy service') {
+            when { branch 'main' }
+            steps {
+                sh '''
+                    set -eu
+                    cd "$INFRA_DIR"
+                    ./scripts/init-server-secrets.sh
+                    docker compose -f "$COMPOSE_FILE" -p "$COMPOSE_PROJECT" config >/tmp/msa-server-compose.yml
+                    docker compose -f "$COMPOSE_FILE" -p "$COMPOSE_PROJECT" up -d item-postgres redis
+                    docker compose -f "$COMPOSE_FILE" -p "$COMPOSE_PROJECT" up -d --build --no-deps "$SERVICE_NAME"
+                '''
+            }
+        }
+
+        stage('Health check') {
+            when { branch 'main' }
+            steps {
+                sh '''
+                    set -eu
+                    curl -fsS --retry 10 --retry-delay 3 --max-time 10 "${API_BASE_URL}/api/items/health" >/dev/null
+                '''
             }
         }
     }
@@ -92,8 +72,7 @@ pipeline {
     post {
         always {
             sh '''
-                docker image rm "${IMAGE_NAME}:build-${IMAGE_TAG}" "${IMAGE_NAME}:${IMAGE_TAG}" "${IMAGE_NAME}:main" >/dev/null 2>&1 || true
-                rm -rf .ci-infra
+                docker image rm "erp007-ci-check-${SERVICE_NAME}:${BUILD_NUMBER}" >/dev/null 2>&1 || true
             '''
         }
     }

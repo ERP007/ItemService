@@ -16,3 +16,5 @@ out
 .env.*
 local-secrets
 server-secrets
+src/main/resources/application-prod.yml
+src/main/resources/application.prod.yml
