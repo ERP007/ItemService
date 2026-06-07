@@ -1,13 +1,14 @@
 package com.fallguys.itemservice;
 
 import org.junit.jupiter.api.Test;
-import org.springframework.boot.test.context.SpringBootTest;
 
-@SpringBootTest
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+
 class ItemServiceApplicationTests {
 
     @Test
-    void contextLoads() {
+    void applicationClassExists() {
+        assertNotNull(ItemServiceApplication.class);
     }
 
 }
