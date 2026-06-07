@@ -4,23 +4,28 @@ import com.fallguys.itemservice.domain.exception.DuplicateItemSkuException;
 import com.fallguys.itemservice.domain.exception.InvalidItemException;
 import com.fallguys.itemservice.domain.exception.ItemNotFoundException;
 import com.fallguys.itemservice.domain.exception.UnavailableItemCategoryException;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
 
+@Service
 public class ItemService {
 
     private final ItemRepository itemRepository;
     private final ItemCategoryRepository itemCategoryRepository;
     private final Clock clock;
 
+    @Autowired
     public ItemService(ItemRepository itemRepository, ItemCategoryRepository itemCategoryRepository) {
         this(itemRepository, itemCategoryRepository, Clock.systemUTC());
     }
 
-    public ItemService(ItemRepository itemRepository, ItemCategoryRepository itemCategoryRepository, Clock clock) {
+    ItemService(ItemRepository itemRepository, ItemCategoryRepository itemCategoryRepository, Clock clock) {
         this.itemRepository = Objects.requireNonNull(itemRepository, "itemRepository");
         this.itemCategoryRepository = Objects.requireNonNull(itemCategoryRepository, "itemCategoryRepository");
         this.clock = Objects.requireNonNull(clock, "clock");
@@ -38,6 +43,7 @@ public class ItemService {
      * 예외:
      * - 잘못된 검색 조건: InvalidItemException (롤백 대상 변경 없음)
      */
+    @Transactional(readOnly = true)
     public PageResult<Item> search(SearchItemsQuery query) {
         SearchItemsQuery validatedQuery = Objects.requireNonNull(query, "query");
 
@@ -57,6 +63,7 @@ public class ItemService {
      * - SKU 형식 오류: InvalidItemException (롤백 대상 변경 없음)
      * - 품목 없음: ItemNotFoundException (롤백 대상 변경 없음)
      */
+    @Transactional(readOnly = true)
     public Item getBySku(String sku) {
         String normalizedSku = requireText(sku, "sku");
 
@@ -76,6 +83,7 @@ public class ItemService {
      * 예외:
      * - SKU 형식 오류: InvalidItemException (롤백 대상 변경 없음)
      */
+    @Transactional(readOnly = true)
     public boolean isSkuAvailable(String sku) {
         String normalizedSku = requireText(sku, "sku");
 
@@ -97,6 +105,7 @@ public class ItemService {
      * - 카테고리 사용 불가: UnavailableItemCategoryException (저장 전 중단)
      * - 품목 불변식 위반: InvalidItemException (저장 전 중단)
      */
+    @Transactional
     public Item create(CreateItemCommand command) {
         CreateItemCommand validatedCommand = Objects.requireNonNull(command, "command");
 
@@ -133,6 +142,7 @@ public class ItemService {
      * - 카테고리 사용 불가: UnavailableItemCategoryException (저장 전 중단)
      * - 품목 불변식 위반: InvalidItemException (저장 전 중단)
      */
+    @Transactional
     public Item update(UpdateItemCommand command) {
         UpdateItemCommand validatedCommand = Objects.requireNonNull(command, "command");
         Item item = getBySku(validatedCommand.sku());
@@ -161,6 +171,7 @@ public class ItemService {
      * 예외:
      * - 품목 없음: ItemNotFoundException (저장 전 중단)
      */
+    @Transactional
     public Item activate(String sku) {
         Item item = getBySku(sku);
 
@@ -180,6 +191,7 @@ public class ItemService {
      * 예외:
      * - 품목 없음: ItemNotFoundException (저장 전 중단)
      */
+    @Transactional
     public Item deactivate(String sku) {
         Item item = getBySku(sku);
 
@@ -197,6 +209,7 @@ public class ItemService {
      *
      * 예외: 없음.
      */
+    @Transactional(readOnly = true)
     public List<ItemUnit> getUnits() {
         return List.of(ItemUnit.values());
     }
