@@ -1,0 +1,276 @@
+package com.fallguys.itemservice.domain;
+
+import com.fallguys.itemservice.domain.exception.DuplicateItemSkuException;
+import com.fallguys.itemservice.domain.exception.ItemNotFoundException;
+import com.fallguys.itemservice.domain.exception.UnavailableItemCategoryException;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneOffset;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+
+import static org.junit.jupiter.api.Assertions.assertAll;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+class ItemServiceTest {
+
+    private static final Instant NOW = Instant.parse("2026-06-07T00:00:00Z");
+    private static final Clock CLOCK = Clock.fixed(NOW, ZoneOffset.UTC);
+
+    private FakeItemRepository itemRepository;
+    private FakeItemCategoryRepository itemCategoryRepository;
+    private ItemService itemService;
+
+    @BeforeEach
+    void setUp() {
+        itemRepository = new FakeItemRepository();
+        itemCategoryRepository = new FakeItemCategoryRepository();
+        itemService = new ItemService(itemRepository, itemCategoryRepository, CLOCK);
+    }
+
+    @Test
+    void createsItem() {
+        itemCategoryRepository.addActiveCategory("ENGINE_OIL");
+
+        Item item = itemService.create(new CreateItemCommand(
+                " ENG-OIL-5W30-1L ",
+                " Engine oil ",
+                " ENGINE_OIL ",
+                ItemUnit.EA,
+                50,
+                8500
+        ));
+
+        assertAll(
+                () -> assertEquals("ENG-OIL-5W30-1L", item.getSku()),
+                () -> assertEquals("Engine oil", item.getName()),
+                () -> assertEquals("ENGINE_OIL", item.getCategoryCode()),
+                () -> assertEquals(ItemUnit.EA, item.getUnit()),
+                () -> assertEquals(50, item.getSafetyStock()),
+                () -> assertEquals(8500, item.getUnitPrice()),
+                () -> assertTrue(item.isActive()),
+                () -> assertEquals(NOW, item.getCreatedAt()),
+                () -> assertEquals(NOW, item.getUpdatedAt()),
+                () -> assertTrue(itemRepository.existsBySku("ENG-OIL-5W30-1L"))
+        );
+    }
+
+    @Test
+    void failsWhenSkuAlreadyExists() {
+        itemRepository.save(existingItem("ENG-OIL-5W30-1L", "ENGINE_OIL", true));
+
+        assertThrows(
+                DuplicateItemSkuException.class,
+                () -> itemService.create(new CreateItemCommand(
+                        "ENG-OIL-5W30-1L",
+                        "Engine oil",
+                        "ENGINE_OIL",
+                        ItemUnit.EA,
+                        50,
+                        8500
+                ))
+        );
+    }
+
+    @Test
+    void failsWhenCategoryIsUnavailableForCreate() {
+        assertAll(
+                () -> assertThrows(
+                        UnavailableItemCategoryException.class,
+                        () -> itemService.create(new CreateItemCommand(
+                                "ENG-OIL-5W30-1L",
+                                "Engine oil",
+                                "ENGINE_OIL",
+                                ItemUnit.EA,
+                                50,
+                                8500
+                        ))
+                ),
+                () -> assertFalse(itemRepository.existsBySku("ENG-OIL-5W30-1L"))
+        );
+    }
+
+    @Test
+    void getsItemBySku() {
+        Item expected = existingItem("ENG-OIL-5W30-1L", "ENGINE_OIL", true);
+        itemRepository.save(expected);
+
+        Item found = itemService.getBySku(" ENG-OIL-5W30-1L ");
+
+        assertSame(expected, found);
+    }
+
+    @Test
+    void failsWhenItemDoesNotExist() {
+        assertThrows(ItemNotFoundException.class, () -> itemService.getBySku("UNKNOWN"));
+    }
+
+    @Test
+    void checksSkuAvailability() {
+        itemRepository.save(existingItem("ENG-OIL-5W30-1L", "ENGINE_OIL", true));
+
+        assertAll(
+                () -> assertFalse(itemService.isSkuAvailable("ENG-OIL-5W30-1L")),
+                () -> assertTrue(itemService.isSkuAvailable("ENG-OIL-0W20-4L"))
+        );
+    }
+
+    @Test
+    void updatesItem() {
+        itemRepository.save(existingItem("ENG-OIL-5W30-1L", "ENGINE_OIL", true));
+        itemCategoryRepository.addActiveCategory("ENGINE_FILTER");
+
+        Item updated = itemService.update(new UpdateItemCommand(
+                "ENG-OIL-5W30-1L",
+                "Oil filter",
+                "ENGINE_FILTER",
+                ItemUnit.SET,
+                10,
+                12000
+        ));
+
+        assertAll(
+                () -> assertEquals("ENG-OIL-5W30-1L", updated.getSku()),
+                () -> assertEquals("Oil filter", updated.getName()),
+                () -> assertEquals("ENGINE_FILTER", updated.getCategoryCode()),
+                () -> assertEquals(ItemUnit.SET, updated.getUnit()),
+                () -> assertEquals(10, updated.getSafetyStock()),
+                () -> assertEquals(12000, updated.getUnitPrice()),
+                () -> assertEquals(NOW, updated.getUpdatedAt())
+        );
+    }
+
+    @Test
+    void failsWhenCategoryIsUnavailableForUpdate() {
+        itemRepository.save(existingItem("ENG-OIL-5W30-1L", "ENGINE_OIL", true));
+
+        assertThrows(
+                UnavailableItemCategoryException.class,
+                () -> itemService.update(new UpdateItemCommand(
+                        "ENG-OIL-5W30-1L",
+                        "Engine oil",
+                        "INACTIVE_CATEGORY",
+                        ItemUnit.EA,
+                        50,
+                        8500
+                ))
+        );
+    }
+
+    @Test
+    void activatesAndDeactivatesItem() {
+        itemRepository.save(existingItem("ENG-OIL-5W30-1L", "ENGINE_OIL", false));
+
+        Item activated = itemService.activate("ENG-OIL-5W30-1L");
+        Item deactivated = itemService.deactivate("ENG-OIL-5W30-1L");
+
+        assertAll(
+                () -> assertFalse(deactivated.isActive()),
+                () -> assertEquals(NOW, activated.getUpdatedAt()),
+                () -> assertEquals(NOW, deactivated.getUpdatedAt())
+        );
+    }
+
+    @Test
+    void searchesItems() {
+        SearchItemsQuery query = new SearchItemsQuery(
+                " oil ",
+                " ENGINE_OIL ",
+                true,
+                0,
+                20,
+                ItemSortBy.NAME,
+                SortDirection.ASC
+        );
+
+        PageResult<Item> result = itemService.search(query);
+
+        assertAll(
+                () -> assertSame(query, itemRepository.lastQuery),
+                () -> assertEquals(0, result.page()),
+                () -> assertEquals(20, result.size())
+        );
+    }
+
+    @Test
+    void returnsSupportedUnits() {
+        assertEquals(List.of(ItemUnit.EA, ItemUnit.SET), itemService.getUnits());
+    }
+
+    private static Item existingItem(String sku, String categoryCode, boolean active) {
+        return Item.of(
+                sku,
+                "Engine oil",
+                categoryCode,
+                ItemUnit.EA,
+                50,
+                8500,
+                active,
+                Instant.parse("2026-06-01T00:00:00Z"),
+                Instant.parse("2026-06-01T00:00:00Z")
+        );
+    }
+
+    private static class FakeItemRepository implements ItemRepository {
+
+        private final Map<String, Item> items = new LinkedHashMap<>();
+        private SearchItemsQuery lastQuery;
+
+        @Override
+        public Optional<Item> findBySku(String sku) {
+            return Optional.ofNullable(items.get(sku));
+        }
+
+        @Override
+        public boolean existsBySku(String sku) {
+            return items.containsKey(sku);
+        }
+
+        @Override
+        public PageResult<Item> search(SearchItemsQuery query) {
+            lastQuery = query;
+            List<Item> content = new ArrayList<>(items.values());
+            return new PageResult<>(content, query.page(), query.size(), content.size());
+        }
+
+        @Override
+        public Item save(Item item) {
+            items.put(item.getSku(), item);
+            return item;
+        }
+    }
+
+    private static class FakeItemCategoryRepository implements ItemCategoryRepository {
+
+        private final Map<String, Boolean> categories = new LinkedHashMap<>();
+
+        void addActiveCategory(String code) {
+            categories.put(code, true);
+        }
+
+        @Override
+        public List<ItemCategory> findRootCategories() {
+            return List.of();
+        }
+
+        @Override
+        public List<ItemCategory> findSubCategories(String parentCode) {
+            return List.of();
+        }
+
+        @Override
+        public boolean existsActiveByCode(String code) {
+            return Boolean.TRUE.equals(categories.get(code));
+        }
+    }
+}
