@@ -266,6 +266,26 @@ class ItemControllerTest {
                 .andExpect(jsonPath("$.errorCode").value("CATEGORY_NOT_FOUND"));
     }
 
+    @Test
+    void supportsGatewayForwardedPathsWithoutApiPrefix() throws Exception {
+        when(itemService.searchViews(any(SearchItemsQuery.class)))
+                .thenReturn(new PageResult<>(List.of(itemView()), 0, 10, 1));
+        when(itemCategoryService.findRootCategories())
+                .thenReturn(List.of(ItemCategory.root("ENGINE", "엔진", 1, true)));
+        when(itemCategoryService.findSubCategories(eq("ENGINE")))
+                .thenReturn(List.of(ItemCategory.subCategory("ENGINE_LUBRICATION", "윤활계통", "ENGINE", 1, true)));
+
+        mockMvc.perform(get("/items"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(1));
+        mockMvc.perform(get("/items/categories"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].categoryCode").value("ENGINE"));
+        mockMvc.perform(get("/items/categories/{categoryCode}/sub-categories", "ENGINE"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].categoryCode").value("ENGINE_LUBRICATION"));
+    }
+
     private static ItemView itemView() {
         return new ItemView(
                 "HMC-EN-00214",

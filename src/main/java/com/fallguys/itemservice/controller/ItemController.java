@@ -38,7 +38,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-@RequestMapping("/api/items")
+@RequestMapping({"/api/items", "/items"})
 @RestController
 @Tag(name = "Items", description = "부품 마스터 목록, 등록, 수정, SKU 중복 확인 API")
 public class ItemController {
