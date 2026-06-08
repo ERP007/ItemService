@@ -15,8 +15,10 @@ public enum ItemErrorCode {
     INVALID_ITEM_NAME("INVALID_ITEM_NAME", "Invalid item name."),
     INVALID_CATEGORY("INVALID_CATEGORY", "Invalid category."),
     INVALID_SUB_CATEGORY("INVALID_SUB_CATEGORY", "Invalid sub category."),
+    INVALID_ITEM_STATUS("INVALID_ITEM_STATUS", "Invalid item status."),
     INACTIVE_ITEM_CANNOT_BE_MODIFIED("INACTIVE_ITEM_CANNOT_BE_MODIFIED", "Inactive item cannot be modified."),
     ITEM_NOT_FOUND("ITEM_NOT_FOUND", "Item not found."),
+    CONCURRENT_MODIFICATION("CONCURRENT_MODIFICATION", "Concurrent modification."),
     INTERNAL_ERROR("INTERNAL_ERROR", "Internal error.");
 
     private final String code;

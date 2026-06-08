@@ -6,9 +6,11 @@ import com.fallguys.itemservice.controller.dto.CreateItemRequest;
 import com.fallguys.itemservice.controller.dto.CreateItemResponse;
 import com.fallguys.itemservice.controller.dto.ItemListResponse;
 import com.fallguys.itemservice.controller.dto.ItemRequestValidator;
+import com.fallguys.itemservice.controller.dto.ItemStatusResponse;
 import com.fallguys.itemservice.controller.dto.UpdateItemRequest;
 import com.fallguys.itemservice.controller.dto.UpdateItemResponse;
 import com.fallguys.itemservice.domain.CreateItemCommand;
+import com.fallguys.itemservice.domain.Item;
 import com.fallguys.itemservice.domain.ItemService;
 import com.fallguys.itemservice.domain.ItemSortBy;
 import com.fallguys.itemservice.domain.ItemView;
@@ -144,6 +146,68 @@ public class ItemController {
         UpdateItemSelectionCommand command = request.toCommand(sku);
 
         return UpdateItemResponse.from(itemService.updateSelection(command));
+    }
+
+    @PatchMapping("/{sku}/activate")
+    @Operation(
+            summary = "부품 활성 복귀",
+            description = "비활성 상태의 부품을 활성 상태로 복귀합니다. ADMIN, HQ_MANAGER, HQ_STAFF 권한은 Gateway/Auth에서 검증합니다."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "부품 활성 복귀 성공",
+                    content = @Content(schema = @Schema(implementation = ItemStatusResponse.class))),
+            @ApiResponse(responseCode = "400", description = "SKU 형식 오류 또는 이미 활성 상태",
+                    content = @Content(schema = @Schema(implementation = ProblemDetail.class))),
+            @ApiResponse(responseCode = "401", description = "미인증 사용자",
+                    content = @Content(schema = @Schema(implementation = ProblemDetail.class))),
+            @ApiResponse(responseCode = "403", description = "활성 복귀 권한 없음",
+                    content = @Content(schema = @Schema(implementation = ProblemDetail.class))),
+            @ApiResponse(responseCode = "404", description = "존재하지 않는 부품",
+                    content = @Content(schema = @Schema(implementation = ProblemDetail.class))),
+            @ApiResponse(responseCode = "409", description = "다른 사용자가 먼저 상태 변경",
+                    content = @Content(schema = @Schema(implementation = ProblemDetail.class))),
+            @ApiResponse(responseCode = "500", description = "서버 내부 오류",
+                    content = @Content(schema = @Schema(implementation = ProblemDetail.class)))
+    })
+    public ItemStatusResponse activate(
+            @Parameter(description = "활성 복귀 대상 부품 SKU", example = "HMC-WP-00229")
+            @PathVariable String sku
+    ) {
+        String normalizedSku = ItemRequestValidator.requireSku(sku, ItemErrorCode.INVALID_SKU_FORMAT);
+        Item item = itemService.activate(normalizedSku);
+
+        return ItemStatusResponse.from(item);
+    }
+
+    @PatchMapping("/{sku}/deactivate")
+    @Operation(
+            summary = "부품 비활성 전환",
+            description = "활성 상태의 부품을 비활성 상태로 전환합니다. ADMIN, HQ_MANAGER, HQ_STAFF 권한은 Gateway/Auth에서 검증합니다."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "부품 비활성 전환 성공",
+                    content = @Content(schema = @Schema(implementation = ItemStatusResponse.class))),
+            @ApiResponse(responseCode = "400", description = "SKU 형식 오류 또는 이미 비활성 상태",
+                    content = @Content(schema = @Schema(implementation = ProblemDetail.class))),
+            @ApiResponse(responseCode = "401", description = "미인증 사용자",
+                    content = @Content(schema = @Schema(implementation = ProblemDetail.class))),
+            @ApiResponse(responseCode = "403", description = "비활성 전환 권한 없음",
+                    content = @Content(schema = @Schema(implementation = ProblemDetail.class))),
+            @ApiResponse(responseCode = "404", description = "존재하지 않는 부품",
+                    content = @Content(schema = @Schema(implementation = ProblemDetail.class))),
+            @ApiResponse(responseCode = "409", description = "다른 사용자가 먼저 상태 변경",
+                    content = @Content(schema = @Schema(implementation = ProblemDetail.class))),
+            @ApiResponse(responseCode = "500", description = "서버 내부 오류",
+                    content = @Content(schema = @Schema(implementation = ProblemDetail.class)))
+    })
+    public ItemStatusResponse deactivate(
+            @Parameter(description = "비활성 전환 대상 부품 SKU", example = "HMC-WP-00229")
+            @PathVariable String sku
+    ) {
+        String normalizedSku = ItemRequestValidator.requireSku(sku, ItemErrorCode.INVALID_SKU_FORMAT);
+        Item item = itemService.deactivate(normalizedSku);
+
+        return ItemStatusResponse.from(item);
     }
 
     @PostMapping("/code-check")

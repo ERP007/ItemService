@@ -2,6 +2,7 @@ package com.fallguys.itemservice.domain;
 
 import com.fallguys.itemservice.domain.exception.DuplicateItemSkuException;
 import com.fallguys.itemservice.domain.exception.InactiveItemCannotBeModifiedException;
+import com.fallguys.itemservice.domain.exception.InvalidItemStatusException;
 import com.fallguys.itemservice.domain.exception.ItemNotFoundException;
 import com.fallguys.itemservice.domain.exception.UnavailableItemCategoryException;
 import org.junit.jupiter.api.BeforeEach;
@@ -173,12 +174,35 @@ class ItemServiceTest {
         itemRepository.save(existingItem("ENG-OIL-5W30-1L", "ENGINE_OIL", false));
 
         Item activated = itemService.activate("ENG-OIL-5W30-1L");
+        assertAll(
+                () -> assertTrue(activated.isActive()),
+                () -> assertEquals(NOW, activated.getUpdatedAt())
+        );
+
         Item deactivated = itemService.deactivate("ENG-OIL-5W30-1L");
 
         assertAll(
                 () -> assertFalse(deactivated.isActive()),
-                () -> assertEquals(NOW, activated.getUpdatedAt()),
                 () -> assertEquals(NOW, deactivated.getUpdatedAt())
+        );
+    }
+
+    @Test
+    void failsWhenStatusChangeTargetStateIsAlreadyApplied() {
+        itemRepository.save(existingItem("ACTIVE-ITEM", "ENGINE_OIL", true));
+        itemRepository.save(existingItem("INACTIVE-ITEM", "ENGINE_OIL", false));
+
+        assertAll(
+                () -> assertThrows(InvalidItemStatusException.class, () -> itemService.activate("ACTIVE-ITEM")),
+                () -> assertThrows(InvalidItemStatusException.class, () -> itemService.deactivate("INACTIVE-ITEM"))
+        );
+    }
+
+    @Test
+    void failsWhenChangingStatusForMissingItem() {
+        assertAll(
+                () -> assertThrows(ItemNotFoundException.class, () -> itemService.activate("UNKNOWN")),
+                () -> assertThrows(ItemNotFoundException.class, () -> itemService.deactivate("UNKNOWN"))
         );
     }
 
