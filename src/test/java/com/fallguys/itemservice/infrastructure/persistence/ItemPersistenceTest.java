@@ -20,8 +20,15 @@ import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabas
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.TestPropertySource;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.TransactionStatus;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.DefaultTransactionDefinition;
 
 import javax.sql.DataSource;
 import java.time.Instant;
@@ -32,6 +39,7 @@ import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @DataJpaTest
@@ -66,11 +74,15 @@ class ItemPersistenceTest {
     @Autowired
     private ItemCategoryJpaDao itemCategoryJpaDao;
 
+    @Autowired
+    private PlatformTransactionManager transactionManager;
+
     @Test
     void flywayCreatesItemMasterTables() {
         assertAll(
                 () -> assertDoesNotThrow(() -> jdbcTemplate.queryForObject("select count(*) from item_categories", Long.class)),
-                () -> assertDoesNotThrow(() -> jdbcTemplate.queryForObject("select count(*) from items", Long.class))
+                () -> assertDoesNotThrow(() -> jdbcTemplate.queryForObject("select count(*) from items", Long.class)),
+                () -> assertDoesNotThrow(() -> jdbcTemplate.queryForObject("select count(version) from items", Long.class))
         );
     }
 
@@ -134,6 +146,43 @@ class ItemPersistenceTest {
                 () -> assertEquals(9000, refound.getUnitPrice()),
                 () -> assertFalse(refound.isActive())
         );
+    }
+
+    @Test
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    void detectsOptimisticLockingConflict() {
+        saveCategory(ItemCategory.root("ENGINE", "Engine", 1, true));
+        saveCategory(ItemCategory.subCategory("ENGINE_OIL", "Engine oil", "ENGINE", 1, true));
+        itemRepository.save(item("ENG-OIL-5W30-1L", "Engine oil", "ENGINE_OIL", ItemUnit.EA, 50, 8500, true));
+
+        DefaultTransactionDefinition definition = new DefaultTransactionDefinition();
+        definition.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+        TransactionStatus firstTransaction = transactionManager.getTransaction(definition);
+        try {
+            Item staleItem = itemRepository.findBySku("ENG-OIL-5W30-1L").orElseThrow();
+
+            TransactionStatus secondTransaction = transactionManager.getTransaction(definition);
+            try {
+                Item latestItem = itemRepository.findBySku("ENG-OIL-5W30-1L").orElseThrow();
+                latestItem.deactivate(UPDATED_AT);
+                itemRepository.save(latestItem);
+                transactionManager.commit(secondTransaction);
+            } catch (RuntimeException ex) {
+                if (!secondTransaction.isCompleted()) {
+                    transactionManager.rollback(secondTransaction);
+                }
+                throw ex;
+            }
+
+            staleItem.deactivate(Instant.parse("2026-06-07T02:00:00Z"));
+            itemRepository.save(staleItem);
+
+            assertThrows(OptimisticLockingFailureException.class, () -> transactionManager.commit(firstTransaction));
+        } finally {
+            if (!firstTransaction.isCompleted()) {
+                transactionManager.rollback(firstTransaction);
+            }
+        }
     }
 
     @Test

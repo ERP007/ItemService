@@ -1,6 +1,7 @@
 package com.fallguys.itemservice.domain;
 
 import com.fallguys.itemservice.domain.exception.InvalidItemException;
+import com.fallguys.itemservice.domain.exception.InvalidItemStatusException;
 
 import java.time.Instant;
 import java.util.Objects;
@@ -90,6 +91,9 @@ public class Item {
 
     public void activate(Instant updatedAt) {
         Instant validatedUpdatedAt = requireInstant(updatedAt, "updatedAt");
+        if (active) {
+            throw InvalidItemStatusException.alreadyActive(sku);
+        }
 
         this.active = true;
         this.updatedAt = validatedUpdatedAt;
@@ -97,6 +101,9 @@ public class Item {
 
     public void deactivate(Instant updatedAt) {
         Instant validatedUpdatedAt = requireInstant(updatedAt, "updatedAt");
+        if (!active) {
+            throw InvalidItemStatusException.alreadyInactive(sku);
+        }
 
         this.active = false;
         this.updatedAt = validatedUpdatedAt;

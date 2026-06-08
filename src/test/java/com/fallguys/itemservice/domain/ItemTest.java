@@ -1,6 +1,7 @@
 package com.fallguys.itemservice.domain;
 
 import com.fallguys.itemservice.domain.exception.InvalidItemException;
+import com.fallguys.itemservice.domain.exception.InvalidItemStatusException;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
@@ -114,6 +115,48 @@ class ItemTest {
         assertAll(
                 () -> assertTrue(item.isActive()),
                 () -> assertEquals(activatedAt, item.getUpdatedAt())
+        );
+    }
+
+    @Test
+    void failsWhenActivatingAlreadyActiveItem() {
+        Item item = Item.create("ENG-OIL-5W30-1L", "Engine oil", "ENGINE_OIL", ItemUnit.EA, 50, 8500, CREATED_AT);
+
+        InvalidItemStatusException exception = assertThrows(
+                InvalidItemStatusException.class,
+                () -> item.activate(UPDATED_AT)
+        );
+
+        assertAll(
+                () -> assertEquals("INVALID_ITEM_STATUS", exception.getCode()),
+                () -> assertTrue(item.isActive()),
+                () -> assertEquals(CREATED_AT, item.getUpdatedAt())
+        );
+    }
+
+    @Test
+    void failsWhenDeactivatingAlreadyInactiveItem() {
+        Item item = Item.of(
+                "ENG-OIL-5W30-1L",
+                "Engine oil",
+                "ENGINE_OIL",
+                ItemUnit.EA,
+                50,
+                8500,
+                false,
+                CREATED_AT,
+                CREATED_AT
+        );
+
+        InvalidItemStatusException exception = assertThrows(
+                InvalidItemStatusException.class,
+                () -> item.deactivate(UPDATED_AT)
+        );
+
+        assertAll(
+                () -> assertEquals("INVALID_ITEM_STATUS", exception.getCode()),
+                () -> assertFalse(item.isActive()),
+                () -> assertEquals(CREATED_AT, item.getUpdatedAt())
         );
     }
 }

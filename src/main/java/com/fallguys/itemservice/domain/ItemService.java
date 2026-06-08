@@ -272,12 +272,14 @@ public class ItemService {
      *
      * 흐름:
      * 1) SKU로 기존 품목을 조회한다.
-     * 2) Item 도메인 모델의 활성 상태를 변경하고 저장한다.
+     * 2) 이미 활성 상태인지 도메인 모델이 검증한다.
+     * 3) Item 도메인 모델의 활성 상태를 변경하고 저장한다.
      *
-     * 트랜잭션: 쓰기. 품목 없음 시 저장하지 않는다.
+     * 트랜잭션: 쓰기. 품목 없음 또는 이미 활성 상태면 저장하지 않는다.
      *
      * 예외:
      * - 품목 없음: ItemNotFoundException (저장 전 중단)
+     * - 이미 활성 상태: InvalidItemStatusException (저장 전 중단)
      */
     @Transactional
     public Item activate(String sku) {
@@ -292,12 +294,14 @@ public class ItemService {
      *
      * 흐름:
      * 1) SKU로 기존 품목을 조회한다.
-     * 2) Item 도메인 모델의 비활성 상태를 변경하고 저장한다.
+     * 2) 이미 비활성 상태인지 도메인 모델이 검증한다.
+     * 3) Item 도메인 모델의 비활성 상태를 변경하고 저장한다.
      *
-     * 트랜잭션: 쓰기. 품목 없음 시 저장하지 않는다.
+     * 트랜잭션: 쓰기. 품목 없음 또는 이미 비활성 상태면 저장하지 않는다.
      *
      * 예외:
      * - 품목 없음: ItemNotFoundException (저장 전 중단)
+     * - 이미 비활성 상태: InvalidItemStatusException (저장 전 중단)
      */
     @Transactional
     public Item deactivate(String sku) {

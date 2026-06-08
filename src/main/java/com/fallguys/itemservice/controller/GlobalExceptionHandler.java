@@ -2,8 +2,10 @@ package com.fallguys.itemservice.controller;
 
 import com.fallguys.itemservice.domain.exception.BusinessException;
 import com.fallguys.itemservice.domain.exception.ItemErrorCode;
+import jakarta.persistence.OptimisticLockException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
@@ -42,6 +44,21 @@ public class GlobalExceptionHandler {
 
         return ResponseEntity.badRequest()
                 .body(build(HttpStatus.BAD_REQUEST, ItemErrorCode.INVALID_PARAMETER.getCode(), "Invalid request."));
+    }
+
+    @ExceptionHandler({
+            OptimisticLockingFailureException.class,
+            OptimisticLockException.class
+    })
+    public ResponseEntity<ProblemDetail> handleConcurrentModification(Exception ex) {
+        log.warn("Concurrent modification: {}", ex.getMessage());
+
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(build(
+                        HttpStatus.CONFLICT,
+                        ItemErrorCode.CONCURRENT_MODIFICATION.getCode(),
+                        ItemErrorCode.CONCURRENT_MODIFICATION.getMessage()
+                ));
     }
 
     @ExceptionHandler(Exception.class)
