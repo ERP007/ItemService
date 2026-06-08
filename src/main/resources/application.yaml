@@ -19,9 +19,12 @@ spring:
 springdoc:
   paths-to-match: /api/items/**
   api-docs:
-    path: /v3/api-docs
+    path: /items/v3/api-docs
   swagger-ui:
-    path: /swagger-ui.html
+    path: /items/swagger-ui.html
+    url: /api/items/v3/api-docs
+    config-url: /api/items/v3/api-docs/swagger-config
+    disable-swagger-default-url: true
     operations-sorter: method
     tags-sorter: alpha
 

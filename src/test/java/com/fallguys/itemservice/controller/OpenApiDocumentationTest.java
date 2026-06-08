@@ -7,6 +7,7 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.test.web.servlet.MockMvc;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -25,7 +26,7 @@ class OpenApiDocumentationTest {
 
     @Test
     void exposesPublicItemOpenApiDocumentation() throws Exception {
-        mockMvc.perform(get("/v3/api-docs"))
+        mockMvc.perform(get("/items/v3/api-docs"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.info.title").value("Item Service API"))
                 .andExpect(jsonPath("$.paths['/api/items']").exists())
@@ -34,5 +35,23 @@ class OpenApiDocumentationTest {
                 .andExpect(jsonPath("$.paths['/api/items/categories/{categoryCode}/sub-categories']").exists())
                 .andExpect(jsonPath("$.paths['/items']").doesNotExist())
                 .andExpect(jsonPath("$.paths['/items/health']").doesNotExist());
+    }
+
+    @Test
+    void exposesSwaggerUiBehindGatewayItemPrefix() throws Exception {
+        mockMvc.perform(get("/items/swagger-ui/index.html"))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/items/swagger-ui/swagger-initializer.js"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(org.hamcrest.Matchers.containsString(
+                        "\"configUrl\" : \"/api/items/v3/api-docs/swagger-config\"")))
+                .andExpect(content().string(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString(
+                        "https://petstore.swagger.io/v2/swagger.json"))));
+
+        mockMvc.perform(get("/items/v3/api-docs/swagger-config"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.url").value("/api/items/v3/api-docs"))
+                .andExpect(jsonPath("$.configUrl").value("/api/items/v3/api-docs/swagger-config"));
     }
 }
