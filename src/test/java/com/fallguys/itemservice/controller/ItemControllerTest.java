@@ -294,6 +294,24 @@ class ItemControllerTest {
     }
 
     @Test
+    void findsUnits() throws Exception {
+        when(itemService.getUnits()).thenReturn(List.of(ItemUnit.EA, ItemUnit.BOX, ItemUnit.SET, ItemUnit.L));
+
+        mockMvc.perform(get("/api/items/units"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].unit").value("EA"))
+                .andExpect(jsonPath("$[0].name").value("EA"))
+                .andExpect(jsonPath("$[1].unit").value("BOX"))
+                .andExpect(jsonPath("$[1].name").value("BOX"))
+                .andExpect(jsonPath("$[2].unit").value("SET"))
+                .andExpect(jsonPath("$[2].name").value("SET"))
+                .andExpect(jsonPath("$[3].unit").value("L"))
+                .andExpect(jsonPath("$[3].name").value("L"));
+
+        verify(itemService).getUnits();
+    }
+
+    @Test
     void findsCategories() throws Exception {
         when(itemCategoryService.findRootCategories())
                 .thenReturn(List.of(ItemCategory.root("ENGINE", "엔진", 1, true)));
@@ -333,10 +351,14 @@ class ItemControllerTest {
                 .thenReturn(List.of(ItemCategory.subCategory("ENGINE_LUBRICATION", "윤활계통", "ENGINE", 1, true)));
         when(itemService.activate(eq("HMC-WP-00229"))).thenReturn(statusItem(true));
         when(itemService.deactivate(eq("HMC-WP-00229"))).thenReturn(statusItem(false));
+        when(itemService.getUnits()).thenReturn(List.of(ItemUnit.EA, ItemUnit.BOX, ItemUnit.SET, ItemUnit.L));
 
         mockMvc.perform(get("/items"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.totalElements").value(1));
+        mockMvc.perform(get("/items/units"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[1].unit").value("BOX"));
         mockMvc.perform(get("/items/categories"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].categoryCode").value("ENGINE"));

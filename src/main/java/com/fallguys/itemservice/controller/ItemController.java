@@ -7,6 +7,7 @@ import com.fallguys.itemservice.controller.dto.CreateItemResponse;
 import com.fallguys.itemservice.controller.dto.ItemListResponse;
 import com.fallguys.itemservice.controller.dto.ItemRequestValidator;
 import com.fallguys.itemservice.controller.dto.ItemStatusResponse;
+import com.fallguys.itemservice.controller.dto.ItemUnitResponse;
 import com.fallguys.itemservice.controller.dto.UpdateItemRequest;
 import com.fallguys.itemservice.controller.dto.UpdateItemResponse;
 import com.fallguys.itemservice.domain.CreateItemCommand;
@@ -22,6 +23,7 @@ import com.fallguys.itemservice.domain.exception.InvalidItemRequestException;
 import com.fallguys.itemservice.domain.exception.ItemErrorCode;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.ArraySchema;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -39,6 +41,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
 
 @RequestMapping({"/api/items", "/items"})
 @RestController
@@ -228,6 +232,25 @@ public class ItemController {
         boolean available = itemService.isSkuAvailable(sku);
 
         return CodeCheckResponse.from(sku, available);
+    }
+
+    @GetMapping("/units")
+    @Operation(
+            summary = "부품 단위 목록 조회",
+            description = "부품 등록/수정 모달에서 사용할 단위 목록을 조회합니다. 단위는 item-service 내부 enum으로 관리합니다."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "부품 단위 목록 조회 성공",
+                    content = @Content(array = @ArraySchema(schema = @Schema(implementation = ItemUnitResponse.class)))),
+            @ApiResponse(responseCode = "401", description = "미인증 사용자",
+                    content = @Content(schema = @Schema(implementation = ProblemDetail.class))),
+            @ApiResponse(responseCode = "500", description = "서버 내부 오류",
+                    content = @Content(schema = @Schema(implementation = ProblemDetail.class)))
+    })
+    public List<ItemUnitResponse> getUnits() {
+        return itemService.getUnits().stream()
+                .map(ItemUnitResponse::from)
+                .toList();
     }
 
     private static String normalizeCategoryCode(String categoryCode) {

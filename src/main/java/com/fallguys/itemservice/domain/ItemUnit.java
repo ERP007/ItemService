@@ -5,8 +5,10 @@ import com.fallguys.itemservice.domain.exception.InvalidItemUnitException;
 import java.util.Locale;
 
 public enum ItemUnit {
-    EA("EA", "Each"),
-    SET("SET", "Set");
+    EA("EA", "EA"),
+    BOX("BOX", "BOX"),
+    SET("SET", "SET"),
+    L("L", "L");
 
     private final String code;
     private final String label;
