@@ -44,3 +44,5 @@ src/main/resources/application.prod.yml
 AGENTS.md
 CLAUDE.md
 items.csv
+
+.env

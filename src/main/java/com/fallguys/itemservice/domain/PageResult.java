@@ -32,4 +32,8 @@ public record PageResult<T>(
     public boolean hasNext() {
         return page + 1 < totalPages();
     }
+
+    public boolean hasPrevious() {
+        return page > 0;
+    }
 }

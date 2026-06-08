@@ -7,8 +7,10 @@ import com.fallguys.itemservice.domain.ItemRepository;
 import com.fallguys.itemservice.domain.ItemSortBy;
 import com.fallguys.itemservice.domain.ItemUnit;
 import com.fallguys.itemservice.domain.PageResult;
+import com.fallguys.itemservice.domain.SearchItemViewsQuery;
 import com.fallguys.itemservice.domain.SearchItemsQuery;
 import com.fallguys.itemservice.domain.SortDirection;
+import com.fallguys.itemservice.domain.ItemView;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -160,6 +162,37 @@ class ItemPersistenceTest {
                 () -> assertTrue(firstPage.hasNext()),
                 () -> assertEquals(1, firstPage.content().size()),
                 () -> assertEquals("ENG-OIL-0W20-4L", firstPage.content().getFirst().getSku())
+        );
+    }
+
+    @Test
+    void searchesItemViewsWithCategoryNames() {
+        saveCategory(ItemCategory.root("ENGINE", "엔진", 1, true));
+        saveCategory(ItemCategory.subCategory("ENGINE_OIL", "윤활계통", "ENGINE", 1, true));
+        saveCategory(ItemCategory.subCategory("ENGINE_FILTER", "필터", "ENGINE", 2, true));
+        itemRepository.save(item("ENG-OIL-5W30-1L", "Alpha oil", "ENGINE_OIL", ItemUnit.EA, 50, 1000, true));
+        itemRepository.save(item("ENG-FILTER-A", "Oil filter", "ENGINE_FILTER", ItemUnit.SET, 5, 5000, true));
+
+        PageResult<ItemView> firstPage = itemRepository.searchViews(new SearchItemViewsQuery(
+                "oil",
+                List.of("ENGINE_OIL", "ENGINE_FILTER"),
+                true,
+                0,
+                1,
+                ItemSortBy.SAFETY_STOCK,
+                SortDirection.ASC
+        ));
+        ItemView first = firstPage.content().getFirst();
+        Optional<ItemView> found = itemRepository.findViewBySku("ENG-OIL-5W30-1L");
+
+        assertAll(
+                () -> assertEquals(2, firstPage.totalElements()),
+                () -> assertEquals("ENG-FILTER-A", first.sku()),
+                () -> assertEquals("필터", first.categoryName()),
+                () -> assertEquals("ENGINE", first.parentCategoryCode()),
+                () -> assertEquals("엔진", first.parentCategoryName()),
+                () -> assertTrue(found.isPresent()),
+                () -> assertEquals("윤활계통", found.orElseThrow().categoryName())
         );
     }
 
