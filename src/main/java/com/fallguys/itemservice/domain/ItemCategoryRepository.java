@@ -18,4 +18,6 @@ public interface ItemCategoryRepository {
     boolean existsActiveRootByCode(String code);
 
     boolean existsActiveSubCategoryOf(String parentCode, String subCategoryCode);
+
+    ItemCategory save(ItemCategory category);
 }

@@ -383,5 +383,11 @@ class ItemServiceTest {
                     .filter(category -> parentCode.equals(category.getParentCode()))
                     .isPresent();
         }
+
+        @Override
+        public ItemCategory save(ItemCategory category) {
+            categories.put(category.getCode(), category);
+            return category;
+        }
     }
 }

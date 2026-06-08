@@ -1,0 +1,43 @@
+sku,name,category,unit,safety_stock,unit_price,active
+ENG-OIL-5W30-1L,엔진오일 5W-30 1L,엔진/오일,EA,50,8500,true
+ENG-OIL-5W30-4L,엔진오일 5W-30 4L,엔진/오일,EA,30,28000,true
+ENG-OIL-0W20-4L,엔진오일 0W-20 4L,엔진/오일,EA,20,35000,true
+ENG-OIL-15W40-4L,엔진오일 15W-40 4L,엔진/오일,EA,0,26000,false
+MIS-OIL-ATF-4L,미션오일 ATF 4L,엔진/오일,EA,18,32000,true
+GEAR-OIL-75W90-1L,기어오일 75W-90 1L,엔진/오일,EA,15,9500,true
+OIL-FLT-001,오일필터,엔진/필터,EA,80,3200,true
+AIR-FLT-002,에어필터,엔진/필터,EA,60,4500,true
+CAB-FLT-003,캐빈필터,엔진/필터,EA,45,8000,true
+FUEL-FLT-004,연료필터,엔진/필터,EA,30,12500,true
+SPK-PLG-IRD-04,스파크플러그 이리듐 4P,점화,SET,20,28000,true
+SPK-PLG-PLT-04,스파크플러그 백금 4P,점화,SET,15,22000,true
+IGN-COIL-V6-01,점화코일 V6 엔진용,점화,EA,12,45000,true
+PLG-CBL-SET-01,플러그케이블 세트,점화,SET,18,18000,true
+BRK-PAD-FR-001,브레이크 패드 (전륜),제동,SET,25,38500,true
+BRK-PAD-RR-001,브레이크 패드 (후륜),제동,SET,25,35000,true
+BRK-DSC-FR-001,브레이크 디스크 (전륜),제동,EA,10,68000,true
+BRK-DSC-RR-001,브레이크 디스크 (후륜),제동,EA,10,58000,true
+BRK-CAL-FR-001,브레이크 캘리퍼 (전륜),제동,EA,6,145000,true
+BRK-FLU-DOT4-1L,브레이크 액 DOT4 1L,제동,EA,35,6500,true
+CLT-DSK-MED-01,클러치 디스크 (중형),동력전달,EA,10,145000,true
+CLT-CVR-MED-01,클러치 커버 (중형),동력전달,EA,8,98000,true
+TIM-BLT-V6-02,타이밍벨트 V6 엔진용,동력전달,EA,15,32000,true
+CV-JNT-FR-01,CV조인트 (전륜),동력전달,EA,8,88000,true
+DRV-SHF-RR-01,드라이브샤프트 (후륜),동력전달,EA,6,165000,true
+SHK-ABS-FR-11,쇼크업소버 (전륜),현가·조향,EA,12,82000,true
+SHK-ABS-RR-11,쇼크업소버 (후륜),현가·조향,EA,12,78000,true
+SPR-COL-FR-01,스프링 (전륜),현가·조향,EA,10,45000,true
+TIE-ROD-LH-01,타이로드 (좌),현가·조향,EA,15,22000,true
+STB-LNK-FR-01,스태빌라이저 링크 (전륜),현가·조향,EA,18,18500,true
+BAT-12V-60,배터리 12V 60Ah,전장,EA,15,95000,true
+BAT-12V-80,배터리 12V 80Ah,전장,EA,12,115000,true
+HLT-LED-LH-01,헤드라이트 LED (좌),전장,EA,8,185000,true
+TLT-LED-LH-01,테일램프 LED (좌),전장,EA,10,72000,true
+RLY-12V-30A-01,릴레이 12V 30A,전장,EA,30,8500,true
+O2-SNS-UP-01,산소센서 (상류),전장,EA,15,68000,true
+WPR-BLD-24,와이퍼 블레이드 24인치,외장·기타,EA,40,12000,true
+WPR-BLD-20,와이퍼 블레이드 20인치,외장·기타,EA,35,10000,true
+WPR-BLD-22,와이퍼 블레이드 22인치,외장·기타,EA,0,11000,false
+TIR-205-55-16,타이어 205/55 R16,외장·기타,EA,20,95000,true
+TIR-225-45-17,타이어 225/45 R17,외장·기타,EA,15,135000,true
+WSH-FLU-2L,워셔액 2L,외장·기타,EA,50,4500,true

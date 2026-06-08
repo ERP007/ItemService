@@ -79,6 +79,14 @@ public class ItemCategoryRepositoryAdapter implements ItemCategoryRepository {
         );
     }
 
+    @Override
+    public ItemCategory save(ItemCategory category) {
+        ItemCategoryEntity entity = jpaDao.findById(category.getCode())
+                .map(existing -> existing.update(category))
+                .orElseGet(() -> ItemCategoryEntity.from(category));
+        return jpaDao.save(entity).toDomain();
+    }
+
     private static String normalizeCode(String code) {
         if (code == null || code.isBlank()) {
             return null;
