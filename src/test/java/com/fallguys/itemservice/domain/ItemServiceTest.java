@@ -1,6 +1,7 @@
 package com.fallguys.itemservice.domain;
 
 import com.fallguys.itemservice.domain.exception.DuplicateItemSkuException;
+import com.fallguys.itemservice.domain.exception.InactiveItemCannotBeModifiedException;
 import com.fallguys.itemservice.domain.exception.ItemNotFoundException;
 import com.fallguys.itemservice.domain.exception.UnavailableItemCategoryException;
 import org.junit.jupiter.api.BeforeEach;
@@ -203,6 +204,49 @@ class ItemServiceTest {
     }
 
     @Test
+    void searchesItemViewsWithRootCategoryExpansion() {
+        itemRepository.save(existingItem("ENG-OIL-5W30-1L", "ENGINE_OIL", true));
+        itemCategoryRepository.addRootCategory("ENGINE");
+        itemCategoryRepository.addSubCategory("ENGINE_OIL", "ENGINE");
+        itemCategoryRepository.addSubCategory("ENGINE_FILTER", "ENGINE");
+
+        PageResult<ItemView> result = itemService.searchViews(new SearchItemsQuery(
+                "oil",
+                "ENGINE",
+                true,
+                0,
+                10,
+                ItemSortBy.UPDATED_AT,
+                SortDirection.DESC
+        ));
+
+        assertAll(
+                () -> assertEquals(1, result.totalElements()),
+                () -> assertEquals(List.of("ENGINE", "ENGINE_OIL", "ENGINE_FILTER"), itemRepository.lastViewQuery.categoryCodes())
+        );
+    }
+
+    @Test
+    void failsWhenUpdatingInactiveItemWithCategorySelection() {
+        itemRepository.save(existingItem("ENG-OIL-5W30-1L", "ENGINE_OIL", false));
+        itemCategoryRepository.addRootCategory("ENGINE");
+        itemCategoryRepository.addSubCategory("ENGINE_OIL", "ENGINE");
+
+        assertThrows(
+                InactiveItemCannotBeModifiedException.class,
+                () -> itemService.updateSelection(new UpdateItemSelectionCommand(
+                        "ENG-OIL-5W30-1L",
+                        "Engine oil",
+                        "ENGINE",
+                        "ENGINE_OIL",
+                        ItemUnit.EA,
+                        50,
+                        8500
+                ))
+        );
+    }
+
+    @Test
     void returnsSupportedUnits() {
         assertEquals(List.of(ItemUnit.EA, ItemUnit.SET), itemService.getUnits());
     }
@@ -225,10 +269,16 @@ class ItemServiceTest {
 
         private final Map<String, Item> items = new LinkedHashMap<>();
         private SearchItemsQuery lastQuery;
+        private SearchItemViewsQuery lastViewQuery;
 
         @Override
         public Optional<Item> findBySku(String sku) {
             return Optional.ofNullable(items.get(sku));
+        }
+
+        @Override
+        public Optional<ItemView> findViewBySku(String sku) {
+            return findBySku(sku).map(FakeItemRepository::toView);
         }
 
         @Override
@@ -244,18 +294,62 @@ class ItemServiceTest {
         }
 
         @Override
+        public PageResult<ItemView> searchViews(SearchItemViewsQuery query) {
+            lastViewQuery = query;
+            List<ItemView> content = items.values().stream()
+                    .map(FakeItemRepository::toView)
+                    .toList();
+            return new PageResult<>(content, query.page(), query.size(), content.size());
+        }
+
+        @Override
         public Item save(Item item) {
             items.put(item.getSku(), item);
             return item;
+        }
+
+        private static ItemView toView(Item item) {
+            return new ItemView(
+                    item.getSku(),
+                    item.getName(),
+                    item.getCategoryCode(),
+                    "Category",
+                    "ENGINE",
+                    "Engine",
+                    item.getUnit(),
+                    item.getSafetyStock(),
+                    item.getUnitPrice(),
+                    item.isActive(),
+                    item.getCreatedAt(),
+                    item.getUpdatedAt()
+            );
         }
     }
 
     private static class FakeItemCategoryRepository implements ItemCategoryRepository {
 
-        private final Map<String, Boolean> categories = new LinkedHashMap<>();
+        private final Map<String, ItemCategory> categories = new LinkedHashMap<>();
 
         void addActiveCategory(String code) {
-            categories.put(code, true);
+            categories.put(code, ItemCategory.subCategory(code, code, "ENGINE", 0, true));
+        }
+
+        void addRootCategory(String code) {
+            categories.put(code, ItemCategory.root(code, code, 0, true));
+        }
+
+        void addSubCategory(String code, String parentCode) {
+            categories.put(code, ItemCategory.subCategory(code, code, parentCode, 0, true));
+        }
+
+        @Override
+        public Optional<ItemCategory> findByCode(String code) {
+            return Optional.ofNullable(categories.get(code));
+        }
+
+        @Override
+        public Optional<ItemCategory> findActiveByCode(String code) {
+            return Optional.ofNullable(categories.get(code));
         }
 
         @Override
@@ -265,12 +359,35 @@ class ItemServiceTest {
 
         @Override
         public List<ItemCategory> findSubCategories(String parentCode) {
-            return List.of();
+            return categories.values().stream()
+                    .filter(category -> parentCode.equals(category.getParentCode()))
+                    .toList();
         }
 
         @Override
         public boolean existsActiveByCode(String code) {
-            return Boolean.TRUE.equals(categories.get(code));
+            return categories.containsKey(code);
+        }
+
+        @Override
+        public boolean existsActiveRootByCode(String code) {
+            return Optional.ofNullable(categories.get(code))
+                    .filter(category -> category.getDepth() == ItemCategory.ROOT_DEPTH)
+                    .isPresent();
+        }
+
+        @Override
+        public boolean existsActiveSubCategoryOf(String parentCode, String subCategoryCode) {
+            return Optional.ofNullable(categories.get(subCategoryCode))
+                    .filter(category -> category.getDepth() == ItemCategory.SUB_CATEGORY_DEPTH)
+                    .filter(category -> parentCode.equals(category.getParentCode()))
+                    .isPresent();
+        }
+
+        @Override
+        public ItemCategory save(ItemCategory category) {
+            categories.put(category.getCode(), category);
+            return category;
         }
     }
 }

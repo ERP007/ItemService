@@ -1,0 +1,100 @@
+package com.fallguys.itemservice.controller.dto;
+
+import com.fallguys.itemservice.domain.ItemUnit;
+import com.fallguys.itemservice.domain.exception.InvalidItemRequestException;
+import com.fallguys.itemservice.domain.exception.ItemErrorCode;
+
+import java.util.regex.Pattern;
+
+public final class ItemRequestValidator {
+
+    private static final Pattern SKU_PATTERN = Pattern.compile("^[A-Z0-9][A-Z0-9_-]{0,63}$");
+    private static final Pattern CATEGORY_CODE_PATTERN = Pattern.compile("^[A-Z0-9][A-Z0-9_]{0,63}$");
+
+    private ItemRequestValidator() {
+    }
+
+    public static String requireSku(String sku, ItemErrorCode missingCode) {
+        String normalizedSku = trimToNull(sku);
+        if (normalizedSku == null) {
+            throw new InvalidItemRequestException(missingCode, "SKU is required.");
+        }
+        if (!SKU_PATTERN.matcher(normalizedSku).matches()) {
+            throw new InvalidItemRequestException(ItemErrorCode.INVALID_SKU_FORMAT, "Invalid SKU format: " + normalizedSku);
+        }
+        return normalizedSku;
+    }
+
+    public static String requireNameForCreate(String name) {
+        String normalizedName = trimToNull(name);
+        if (normalizedName == null) {
+            throw new InvalidItemRequestException(ItemErrorCode.ITEM_NAME_REQUIRED, "Item name is required.");
+        }
+        return normalizedName;
+    }
+
+    public static String requireNameForUpdate(String name) {
+        String normalizedName = trimToNull(name);
+        if (normalizedName == null) {
+            throw new InvalidItemRequestException(ItemErrorCode.INVALID_ITEM_NAME, "Invalid item name.");
+        }
+        return normalizedName;
+    }
+
+    public static String requireCategoryForCreate(String categoryCode) {
+        String normalizedCategoryCode = trimToNull(categoryCode);
+        if (normalizedCategoryCode == null) {
+            throw new InvalidItemRequestException(ItemErrorCode.CATEGORY_REQUIRED, "Category is required.");
+        }
+        return requireCategoryFormat(normalizedCategoryCode, ItemErrorCode.CATEGORY_REQUIRED);
+    }
+
+    public static String requireCategoryForUpdate(String categoryCode) {
+        return requireCategoryFormat(categoryCode, ItemErrorCode.INVALID_CATEGORY);
+    }
+
+    public static String requireSubCategoryForUpdate(String subCategoryCode) {
+        return requireCategoryFormat(subCategoryCode, ItemErrorCode.INVALID_SUB_CATEGORY);
+    }
+
+    public static String requireCategoryForFilter(String categoryCode) {
+        return requireCategoryFormat(categoryCode, ItemErrorCode.INVALID_CATEGORY_CODE);
+    }
+
+    public static ItemUnit requireUnit(String unit) {
+        try {
+            return ItemUnit.from(unit);
+        } catch (RuntimeException ex) {
+            throw new InvalidItemRequestException(ItemErrorCode.INVALID_UNIT, "Invalid unit: " + unit);
+        }
+    }
+
+    public static int requireSafetyStock(Integer safetyStock) {
+        if (safetyStock == null || safetyStock < 0) {
+            throw new InvalidItemRequestException(ItemErrorCode.INVALID_SAFETY_STOCK, "Invalid safety stock.");
+        }
+        return safetyStock;
+    }
+
+    public static int requireUnitPrice(Integer unitPrice) {
+        if (unitPrice == null || unitPrice < 0) {
+            throw new InvalidItemRequestException(ItemErrorCode.INVALID_UNIT_PRICE, "Invalid unit price.");
+        }
+        return unitPrice;
+    }
+
+    public static String trimToNull(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        return value.trim();
+    }
+
+    private static String requireCategoryFormat(String categoryCode, ItemErrorCode errorCode) {
+        String normalizedCategoryCode = trimToNull(categoryCode);
+        if (normalizedCategoryCode == null || !CATEGORY_CODE_PATTERN.matcher(normalizedCategoryCode).matches()) {
+            throw new InvalidItemRequestException(errorCode, "Invalid category code: " + categoryCode);
+        }
+        return normalizedCategoryCode;
+    }
+}

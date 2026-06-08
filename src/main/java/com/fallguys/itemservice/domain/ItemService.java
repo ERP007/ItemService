@@ -2,8 +2,12 @@ package com.fallguys.itemservice.domain;
 
 import com.fallguys.itemservice.domain.exception.DuplicateItemSkuException;
 import com.fallguys.itemservice.domain.exception.InvalidItemException;
+import com.fallguys.itemservice.domain.exception.InactiveItemCannotBeModifiedException;
 import com.fallguys.itemservice.domain.exception.ItemNotFoundException;
 import com.fallguys.itemservice.domain.exception.UnavailableItemCategoryException;
+import com.fallguys.itemservice.domain.exception.CategoryNotFoundException;
+import com.fallguys.itemservice.domain.exception.InvalidItemRequestException;
+import com.fallguys.itemservice.domain.exception.ItemErrorCode;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -51,6 +55,35 @@ public class ItemService {
     }
 
     /**
+     * API 응답용 품목 목록을 검색한다.
+     *
+     * 흐름:
+     * 1) 선택된 categoryCode가 있으면 활성 카테고리인지 확인한다.
+     * 2) 대분류 선택 시 대분류 코드와 하위 중분류 코드를 모두 검색 조건에 포함한다.
+     * 3) ItemRepository로 카테고리 표시명을 포함한 목록 조회를 위임한다.
+     *
+     * 트랜잭션: 읽기. 저장이나 상태 변경은 수행하지 않는다.
+     *
+     * 예외:
+     * - 존재하지 않는 카테고리: CategoryNotFoundException (롤백 대상 변경 없음)
+     */
+    @Transactional(readOnly = true)
+    public PageResult<ItemView> searchViews(SearchItemsQuery query) {
+        SearchItemsQuery validatedQuery = Objects.requireNonNull(query, "query");
+        List<String> categoryCodes = resolveCategoryCodes(validatedQuery.categoryCode());
+
+        return itemRepository.searchViews(new SearchItemViewsQuery(
+                validatedQuery.search(),
+                categoryCodes,
+                validatedQuery.active(),
+                validatedQuery.page(),
+                validatedQuery.size(),
+                validatedQuery.sortBy(),
+                validatedQuery.sortDirection()
+        ));
+    }
+
+    /**
      * SKU로 품목 단건을 조회한다.
      *
      * 흐름:
@@ -69,6 +102,25 @@ public class ItemService {
 
         return itemRepository.findBySku(normalizedSku)
                 .orElseThrow(() -> new ItemNotFoundException(normalizedSku));
+    }
+
+    /**
+     * SKU로 API 응답용 품목 단건을 조회한다.
+     *
+     * 흐름:
+     * 1) SKU를 정규화한다.
+     * 2) ItemRepository로 카테고리 표시명을 포함한 단건 조회를 위임한다.
+     *
+     * 트랜잭션: 읽기. 저장이나 상태 변경은 수행하지 않는다.
+     *
+     * 예외:
+     * - 품목 없음: ItemNotFoundException (롤백 대상 변경 없음)
+     */
+    @Transactional(readOnly = true)
+    public ItemView getViewBySku(String sku) {
+        String normalizedSku = requireText(sku, "sku");
+
+        return findViewBySku(normalizedSku);
     }
 
     /**
@@ -128,6 +180,25 @@ public class ItemService {
     }
 
     /**
+     * 품목을 신규 등록하고 API 응답용 상세 데이터를 조회한다.
+     *
+     * 흐름:
+     * 1) create(command)로 도메인 저장 흐름을 수행한다.
+     * 2) 저장된 SKU로 카테고리 표시명을 포함한 응답 데이터를 조회한다.
+     *
+     * 트랜잭션: 쓰기. 등록 검증 실패 시 저장하지 않는다.
+     *
+     * 예외:
+     * - create(command)의 예외와 동일하다.
+     */
+    @Transactional
+    public ItemView createView(CreateItemCommand command) {
+        Item item = create(command);
+
+        return findViewBySku(item.getSku());
+    }
+
+    /**
      * 기존 품목 정보를 수정한다.
      *
      * 흐름:
@@ -157,6 +228,43 @@ public class ItemService {
                 clock.instant()
         );
         return itemRepository.save(item);
+    }
+
+    /**
+     * 대분류·중분류 선택값을 검증한 뒤 품목 기본 정보를 수정한다.
+     *
+     * 흐름:
+     * 1) SKU로 기존 품목을 조회한다.
+     * 2) 비활성 품목이면 수정을 중단한다.
+     * 3) 대분류와 중분류가 모두 활성이고 부모-자식 관계가 맞는지 확인한다.
+     * 4) 최종 중분류 코드로 품목을 수정하고 저장한다.
+     *
+     * 트랜잭션: 쓰기. 검증 실패 시 저장하지 않는다.
+     *
+     * 예외:
+     * - 품목 없음: ItemNotFoundException (저장 전 중단)
+     * - 비활성 품목 수정: InactiveItemCannotBeModifiedException (저장 전 중단)
+     * - 잘못된 대분류/중분류: InvalidItemRequestException (저장 전 중단)
+     */
+    @Transactional
+    public ItemView updateSelection(UpdateItemSelectionCommand command) {
+        UpdateItemSelectionCommand validatedCommand = Objects.requireNonNull(command, "command");
+        Item item = getBySku(validatedCommand.sku());
+        if (!item.isActive()) {
+            throw new InactiveItemCannotBeModifiedException(item.getSku());
+        }
+        validateCategorySelection(validatedCommand.categoryCode(), validatedCommand.subCategoryCode());
+
+        item.update(
+                validatedCommand.name(),
+                validatedCommand.subCategoryCode(),
+                validatedCommand.unit(),
+                validatedCommand.safetyStock(),
+                validatedCommand.unitPrice(),
+                clock.instant()
+        );
+        Item saved = itemRepository.save(item);
+        return findViewBySku(saved.getSku());
     }
 
     /**
@@ -219,6 +327,38 @@ public class ItemService {
         if (!itemCategoryRepository.existsActiveByCode(normalizedCategoryCode)) {
             throw new UnavailableItemCategoryException(normalizedCategoryCode);
         }
+    }
+
+    private List<String> resolveCategoryCodes(String categoryCode) {
+        if (categoryCode == null) {
+            return List.of();
+        }
+
+        ItemCategory category = itemCategoryRepository.findActiveByCode(categoryCode)
+                .orElseThrow(() -> new CategoryNotFoundException(categoryCode));
+        if (category.getDepth() == ItemCategory.SUB_CATEGORY_DEPTH) {
+            return List.of(category.getCode());
+        }
+
+        List<String> childCodes = itemCategoryRepository.findSubCategories(category.getCode()).stream()
+                .map(ItemCategory::getCode)
+                .toList();
+        return java.util.stream.Stream.concat(java.util.stream.Stream.of(category.getCode()), childCodes.stream())
+                .toList();
+    }
+
+    private void validateCategorySelection(String categoryCode, String subCategoryCode) {
+        if (!itemCategoryRepository.existsActiveRootByCode(categoryCode)) {
+            throw new InvalidItemRequestException(ItemErrorCode.INVALID_CATEGORY, "Invalid category: " + categoryCode);
+        }
+        if (!itemCategoryRepository.existsActiveSubCategoryOf(categoryCode, subCategoryCode)) {
+            throw new InvalidItemRequestException(ItemErrorCode.INVALID_SUB_CATEGORY, "Invalid sub category: " + subCategoryCode);
+        }
+    }
+
+    private ItemView findViewBySku(String sku) {
+        return itemRepository.findViewBySku(sku)
+                .orElseThrow(() -> new ItemNotFoundException(sku));
     }
 
     private static String requireText(String value, String fieldName) {

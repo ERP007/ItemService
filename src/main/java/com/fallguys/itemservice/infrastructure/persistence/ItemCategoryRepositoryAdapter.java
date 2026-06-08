@@ -5,6 +5,7 @@ import com.fallguys.itemservice.domain.ItemCategoryRepository;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
+import java.util.Optional;
 
 @Repository
 public class ItemCategoryRepositoryAdapter implements ItemCategoryRepository {
@@ -13,6 +14,24 @@ public class ItemCategoryRepositoryAdapter implements ItemCategoryRepository {
 
     public ItemCategoryRepositoryAdapter(ItemCategoryJpaDao jpaDao) {
         this.jpaDao = jpaDao;
+    }
+
+    @Override
+    public Optional<ItemCategory> findByCode(String code) {
+        String normalizedCode = normalizeCode(code);
+        if (normalizedCode == null) {
+            return Optional.empty();
+        }
+        return jpaDao.findById(normalizedCode).map(ItemCategoryEntity::toDomain);
+    }
+
+    @Override
+    public Optional<ItemCategory> findActiveByCode(String code) {
+        String normalizedCode = normalizeCode(code);
+        if (normalizedCode == null) {
+            return Optional.empty();
+        }
+        return jpaDao.findByCodeAndActiveTrue(normalizedCode).map(ItemCategoryEntity::toDomain);
     }
 
     @Override
@@ -38,6 +57,34 @@ public class ItemCategoryRepositoryAdapter implements ItemCategoryRepository {
     public boolean existsActiveByCode(String code) {
         String normalizedCode = normalizeCode(code);
         return normalizedCode != null && jpaDao.existsByCodeAndActiveTrue(normalizedCode);
+    }
+
+    @Override
+    public boolean existsActiveRootByCode(String code) {
+        String normalizedCode = normalizeCode(code);
+        return normalizedCode != null
+                && jpaDao.existsByCodeAndDepthAndActiveTrue(normalizedCode, ItemCategory.ROOT_DEPTH);
+    }
+
+    @Override
+    public boolean existsActiveSubCategoryOf(String parentCode, String subCategoryCode) {
+        String normalizedParentCode = normalizeCode(parentCode);
+        String normalizedSubCategoryCode = normalizeCode(subCategoryCode);
+        return normalizedParentCode != null
+                && normalizedSubCategoryCode != null
+                && jpaDao.existsByCodeAndParentCodeAndDepthAndActiveTrue(
+                normalizedSubCategoryCode,
+                normalizedParentCode,
+                ItemCategory.SUB_CATEGORY_DEPTH
+        );
+    }
+
+    @Override
+    public ItemCategory save(ItemCategory category) {
+        ItemCategoryEntity entity = jpaDao.findById(category.getCode())
+                .map(existing -> existing.update(category))
+                .orElseGet(() -> ItemCategoryEntity.from(category));
+        return jpaDao.save(entity).toDomain();
     }
 
     private static String normalizeCode(String code) {

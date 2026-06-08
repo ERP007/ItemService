@@ -15,3 +15,17 @@ spring:
     properties:
       hibernate:
         format_sql: true
+
+springdoc:
+  paths-to-match: /api/items/**
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    operations-sorter: method
+    tags-sorter: alpha
+
+item:
+  master-seed:
+    enabled: ${ITEM_MASTER_SEED_ENABLED:true}
+    location: ${ITEM_MASTER_SEED_LOCATION:classpath:data/items.csv}
