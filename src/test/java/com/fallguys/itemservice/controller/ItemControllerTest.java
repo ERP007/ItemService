@@ -1,6 +1,7 @@
 package com.fallguys.itemservice.controller;
 
 import com.fallguys.itemservice.domain.CreateItemCommand;
+import com.fallguys.itemservice.domain.Item;
 import com.fallguys.itemservice.domain.ItemCategory;
 import com.fallguys.itemservice.domain.ItemCategoryService;
 import com.fallguys.itemservice.domain.ItemService;
@@ -14,11 +15,13 @@ import com.fallguys.itemservice.domain.UpdateItemSelectionCommand;
 import com.fallguys.itemservice.domain.exception.CategoryNotFoundException;
 import com.fallguys.itemservice.domain.exception.DuplicateItemSkuException;
 import com.fallguys.itemservice.domain.exception.InactiveItemCannotBeModifiedException;
+import com.fallguys.itemservice.domain.exception.InvalidItemStatusException;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.http.MediaType;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -220,6 +223,60 @@ class ItemControllerTest {
     }
 
     @Test
+    void activatesItem() throws Exception {
+        when(itemService.activate(eq("HMC-WP-00229"))).thenReturn(statusItem(true));
+
+        mockMvc.perform(patch("/api/items/{sku}/activate", "HMC-WP-00229"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.sku").value("HMC-WP-00229"))
+                .andExpect(jsonPath("$.name").value("워터 펌프 어셈블리 (구형)"))
+                .andExpect(jsonPath("$.active").value(true))
+                .andExpect(jsonPath("$.updatedAt").value("2026-06-07T10:30"));
+
+        verify(itemService).activate("HMC-WP-00229");
+    }
+
+    @Test
+    void deactivatesItem() throws Exception {
+        when(itemService.deactivate(eq("HMC-WP-00229"))).thenReturn(statusItem(false));
+
+        mockMvc.perform(patch("/api/items/{sku}/deactivate", "HMC-WP-00229"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.sku").value("HMC-WP-00229"))
+                .andExpect(jsonPath("$.active").value(false))
+                .andExpect(jsonPath("$.updatedAt").value("2026-06-07T10:30"));
+
+        verify(itemService).deactivate("HMC-WP-00229");
+    }
+
+    @Test
+    void failsWhenStatusChangeSkuIsInvalid() throws Exception {
+        mockMvc.perform(patch("/api/items/{sku}/activate", "hmc.wp"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errorCode").value("INVALID_SKU_FORMAT"));
+    }
+
+    @Test
+    void failsWhenItemStatusIsAlreadyApplied() throws Exception {
+        when(itemService.activate(eq("HMC-WP-00229")))
+                .thenThrow(InvalidItemStatusException.alreadyActive("HMC-WP-00229"));
+
+        mockMvc.perform(patch("/api/items/{sku}/activate", "HMC-WP-00229"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errorCode").value("INVALID_ITEM_STATUS"));
+    }
+
+    @Test
+    void mapsConcurrentStatusChangeToConflict() throws Exception {
+        when(itemService.deactivate(eq("HMC-WP-00229")))
+                .thenThrow(new ObjectOptimisticLockingFailureException(Item.class, "HMC-WP-00229"));
+
+        mockMvc.perform(patch("/api/items/{sku}/deactivate", "HMC-WP-00229"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.errorCode").value("CONCURRENT_MODIFICATION"));
+    }
+
+    @Test
     void checksSkuAvailability() throws Exception {
         when(itemService.isSkuAvailable(eq("HMC-EN-00214"))).thenReturn(false);
 
@@ -274,6 +331,8 @@ class ItemControllerTest {
                 .thenReturn(List.of(ItemCategory.root("ENGINE", "엔진", 1, true)));
         when(itemCategoryService.findSubCategories(eq("ENGINE")))
                 .thenReturn(List.of(ItemCategory.subCategory("ENGINE_LUBRICATION", "윤활계통", "ENGINE", 1, true)));
+        when(itemService.activate(eq("HMC-WP-00229"))).thenReturn(statusItem(true));
+        when(itemService.deactivate(eq("HMC-WP-00229"))).thenReturn(statusItem(false));
 
         mockMvc.perform(get("/items"))
                 .andExpect(status().isOk())
@@ -284,6 +343,26 @@ class ItemControllerTest {
         mockMvc.perform(get("/items/categories/{categoryCode}/sub-categories", "ENGINE"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].categoryCode").value("ENGINE_LUBRICATION"));
+        mockMvc.perform(patch("/items/{sku}/activate", "HMC-WP-00229"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.active").value(true));
+        mockMvc.perform(patch("/items/{sku}/deactivate", "HMC-WP-00229"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.active").value(false));
+    }
+
+    private static Item statusItem(boolean active) {
+        return Item.of(
+                "HMC-WP-00229",
+                "워터 펌프 어셈블리 (구형)",
+                "ENGINE_LUBRICATION",
+                ItemUnit.EA,
+                120,
+                15000,
+                active,
+                CREATED_AT,
+                UPDATED_AT
+        );
     }
 
     private static ItemView itemView() {
