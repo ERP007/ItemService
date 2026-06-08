@@ -272,7 +272,7 @@ class ItemServiceTest {
 
     @Test
     void returnsSupportedUnits() {
-        assertEquals(List.of(ItemUnit.EA, ItemUnit.SET), itemService.getUnits());
+        assertEquals(List.of(ItemUnit.EA, ItemUnit.BOX, ItemUnit.SET, ItemUnit.L), itemService.getUnits());
     }
 
     private static Item existingItem(String sku, String categoryCode, boolean active) {

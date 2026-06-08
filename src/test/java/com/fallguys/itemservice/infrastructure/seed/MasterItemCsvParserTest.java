@@ -54,10 +54,10 @@ class MasterItemCsvParserTest {
     void failsWhenUnitIsInvalid() {
         MasterItemSeedException exception = assertThrows(MasterItemSeedException.class, () -> parser.parse(csv("""
                 sku,name,category,unit,safety_stock,unit_price,active
-                UNKNOWN-001,Unknown item,제동,BOX,1,1000,true
+                UNKNOWN-001,Unknown item,제동,PACK,1,1000,true
                 """), "test.csv"));
 
-        assertEquals("Invalid unit at row 1: BOX", exception.getMessage());
+        assertEquals("Invalid unit at row 1: PACK", exception.getMessage());
     }
 
     @Test
