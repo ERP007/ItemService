@@ -136,7 +136,7 @@ public class ItemController {
     @PostMapping
     @Operation(
             summary = "부품 신규 등록",
-            description = "사용자가 입력한 SKU와 부품 기본 정보로 신규 부품을 활성 상태로 등록합니다."
+            description = "사용자가 입력한 SKU와 부품 기본 정보로 신규 부품을 활성 상태로 등록합니다. ADMIN, HQ_MANAGER, HQ_STAFF 권한만 허용합니다."
     )
     @ApiResponses({
             @ApiResponse(responseCode = "201", description = "부품 등록 성공",
@@ -146,6 +146,10 @@ public class ItemController {
             @ApiResponse(responseCode = "404", description = "존재하지 않는 중분류",
                     content = @Content(schema = @Schema(implementation = ProblemDetail.class))),
             @ApiResponse(responseCode = "409", description = "이미 존재하는 SKU",
+                    content = @Content(schema = @Schema(implementation = ProblemDetail.class))),
+            @ApiResponse(responseCode = "401", description = "미인증 사용자",
+                    content = @Content(schema = @Schema(implementation = ProblemDetail.class))),
+            @ApiResponse(responseCode = "403", description = "부품 등록 권한 없음",
                     content = @Content(schema = @Schema(implementation = ProblemDetail.class))),
             @ApiResponse(responseCode = "500", description = "서버 내부 오류",
                     content = @Content(schema = @Schema(implementation = ProblemDetail.class)))
@@ -160,12 +164,16 @@ public class ItemController {
     @PatchMapping("/{sku}")
     @Operation(
             summary = "부품 기본 정보 수정",
-            description = "SKU를 제외한 부품명, 대분류/중분류, 단위, 기준 단가, 안전재고 기준을 수정합니다."
+            description = "SKU를 제외한 부품명, 대분류/중분류, 단위, 기준 단가, 안전재고 기준을 수정합니다. ADMIN, HQ_MANAGER, HQ_STAFF 권한만 허용합니다."
     )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "부품 수정 성공",
                     content = @Content(schema = @Schema(implementation = UpdateItemResponse.class))),
             @ApiResponse(responseCode = "400", description = "요청값 검증 오류 또는 비활성 부품 수정 시도",
+                    content = @Content(schema = @Schema(implementation = ProblemDetail.class))),
+            @ApiResponse(responseCode = "401", description = "미인증 사용자",
+                    content = @Content(schema = @Schema(implementation = ProblemDetail.class))),
+            @ApiResponse(responseCode = "403", description = "부품 수정 권한 없음",
                     content = @Content(schema = @Schema(implementation = ProblemDetail.class))),
             @ApiResponse(responseCode = "404", description = "존재하지 않는 부품",
                     content = @Content(schema = @Schema(implementation = ProblemDetail.class))),
@@ -247,12 +255,16 @@ public class ItemController {
     @PostMapping("/code-check")
     @Operation(
             summary = "SKU 중복 확인",
-            description = "신규 부품 등록 시 SKU 사용 가능 여부를 확인합니다. 중복은 에러가 아니라 available 값으로 반환합니다."
+            description = "신규 부품 등록 시 SKU 사용 가능 여부를 확인합니다. 중복은 에러가 아니라 available 값으로 반환합니다. ADMIN, HQ_MANAGER, HQ_STAFF 권한만 허용합니다."
     )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "SKU 중복 확인 성공",
                     content = @Content(schema = @Schema(implementation = CodeCheckResponse.class))),
             @ApiResponse(responseCode = "400", description = "SKU 누락 또는 형식 오류",
+                    content = @Content(schema = @Schema(implementation = ProblemDetail.class))),
+            @ApiResponse(responseCode = "401", description = "미인증 사용자",
+                    content = @Content(schema = @Schema(implementation = ProblemDetail.class))),
+            @ApiResponse(responseCode = "403", description = "SKU 중복 확인 권한 없음",
                     content = @Content(schema = @Schema(implementation = ProblemDetail.class))),
             @ApiResponse(responseCode = "500", description = "서버 내부 오류",
                     content = @Content(schema = @Schema(implementation = ProblemDetail.class)))

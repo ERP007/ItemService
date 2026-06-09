@@ -1,6 +1,8 @@
 package com.fallguys.itemservice.domain.exception;
 
 public enum ItemErrorCode {
+    UNAUTHORIZED("UNAUTHORIZED", "Authentication is required."),
+    FORBIDDEN("FORBIDDEN", "Access is denied."),
     INVALID_PARAMETER("INVALID_PARAMETER", "Invalid parameter."),
     INVALID_CATEGORY_CODE("INVALID_CATEGORY_CODE", "Invalid category code."),
     CATEGORY_NOT_FOUND("CATEGORY_NOT_FOUND", "Category not found."),
