@@ -1,11 +1,15 @@
 package com.fallguys.itemservice.domain.exception;
 
 public enum ItemErrorCode {
+    UNAUTHORIZED("UNAUTHORIZED", "Authentication is required."),
+    FORBIDDEN("FORBIDDEN", "Access is denied."),
     INVALID_PARAMETER("INVALID_PARAMETER", "Invalid parameter."),
     INVALID_CATEGORY_CODE("INVALID_CATEGORY_CODE", "Invalid category code."),
     CATEGORY_NOT_FOUND("CATEGORY_NOT_FOUND", "Category not found."),
     SKU_REQUIRED("SKU_REQUIRED", "SKU is required."),
+    SKUS_REQUIRED("SKUS_REQUIRED", "SKUs are required."),
     INVALID_SKU_FORMAT("INVALID_SKU_FORMAT", "Invalid SKU format."),
+    TOO_MANY_SKUS("TOO_MANY_SKUS", "Too many SKUs."),
     ITEM_NAME_REQUIRED("ITEM_NAME_REQUIRED", "Item name is required."),
     CATEGORY_REQUIRED("CATEGORY_REQUIRED", "Category is required."),
     INVALID_UNIT("INVALID_UNIT", "Invalid unit."),

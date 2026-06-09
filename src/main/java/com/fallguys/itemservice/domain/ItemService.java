@@ -105,6 +105,28 @@ public class ItemService {
     }
 
     /**
+     * 여러 SKU로 품목을 조회한다.
+     *
+     * 흐름:
+     * 1) 컨트롤러에서 정규화·검증된 SKU 목록을 받는다.
+     * 2) ItemRepository로 배치 조회를 위임한다.
+     *
+     * 트랜잭션: 읽기. 저장이나 상태 변경은 수행하지 않는다.
+     *
+     * 예외:
+     * - null SKU 목록: NullPointerException (호출 계약 위반, 롤백 대상 변경 없음)
+     */
+    @Transactional(readOnly = true)
+    public List<Item> getBySkus(List<String> skus) {
+        List<String> validatedSkus = Objects.requireNonNull(skus, "skus");
+        if (validatedSkus.isEmpty()) {
+            return List.of();
+        }
+
+        return itemRepository.findBySkus(validatedSkus);
+    }
+
+    /**
      * SKU로 API 응답용 품목 단건을 조회한다.
      *
      * 흐름:
