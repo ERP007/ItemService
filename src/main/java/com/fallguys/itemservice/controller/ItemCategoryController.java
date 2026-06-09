@@ -20,7 +20,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
-@RequestMapping({"items/categories"})
+@RequestMapping("/items/categories")
 @RestController
 @Tag(name = "Item Categories", description = "부품 대분류와 중분류 조회 API")
 public class ItemCategoryController {

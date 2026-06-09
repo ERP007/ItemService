@@ -16,7 +16,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "spring.datasource.driver-class-name=org.h2.Driver",
         "spring.datasource.username=sa",
         "spring.datasource.password=",
-        "spring.jpa.hibernate.ddl-auto=validate"
+        "spring.jpa.hibernate.ddl-auto=validate",
+        "OPENAPI_SERVER_URL=/api"
 })
 @AutoConfigureMockMvc
 class OpenApiDocumentationTest {
@@ -29,18 +30,19 @@ class OpenApiDocumentationTest {
         mockMvc.perform(get("/items/v3/api-docs"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.info.title").value("Item Service API"))
-                .andExpect(jsonPath("$.paths['/api/items']").exists())
-                .andExpect(jsonPath("$.paths['/api/items/{sku}']").exists())
-                .andExpect(jsonPath("$.paths['/api/items/{sku}/activate']").exists())
-                .andExpect(jsonPath("$.paths['/api/items/{sku}/deactivate']").exists())
-                .andExpect(jsonPath("$.paths['/api/items/code-check']").exists())
-                .andExpect(jsonPath("$.paths['/api/items/units']").exists())
-                .andExpect(jsonPath("$.paths['/api/items/categories']").exists())
-                .andExpect(jsonPath("$.paths['/api/items/categories/{categoryCode}/sub-categories']").exists())
-                .andExpect(jsonPath("$.paths['/items']").doesNotExist())
+                .andExpect(jsonPath("$.servers[0].url").value("/api"))
+                .andExpect(jsonPath("$.paths['/items']").exists())
+                .andExpect(jsonPath("$.paths['/items/{sku}']").exists())
+                .andExpect(jsonPath("$.paths['/items/{sku}/activate']").exists())
+                .andExpect(jsonPath("$.paths['/items/{sku}/deactivate']").exists())
+                .andExpect(jsonPath("$.paths['/items/code-check']").exists())
+                .andExpect(jsonPath("$.paths['/items/units']").exists())
+                .andExpect(jsonPath("$.paths['/items/health']").exists())
+                .andExpect(jsonPath("$.paths['/items/categories']").exists())
+                .andExpect(jsonPath("$.paths['/items/categories/{categoryCode}/sub-categories']").exists())
+                .andExpect(jsonPath("$.paths['/api/items']").doesNotExist())
                 .andExpect(jsonPath("$.paths['/internal/items/{sku}']").doesNotExist())
-                .andExpect(jsonPath("$.paths['/internal/items/batch']").doesNotExist())
-                .andExpect(jsonPath("$.paths['/items/health']").doesNotExist());
+                .andExpect(jsonPath("$.paths['/internal/items/batch']").doesNotExist());
     }
 
     @Test
