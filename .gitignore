@@ -47,3 +47,4 @@ items.csv
 !src/main/resources/data/items.csv
 
 .env
+.DS_Store

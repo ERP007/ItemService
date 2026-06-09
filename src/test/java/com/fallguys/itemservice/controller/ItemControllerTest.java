@@ -16,6 +16,7 @@ import com.fallguys.itemservice.domain.exception.CategoryNotFoundException;
 import com.fallguys.itemservice.domain.exception.DuplicateItemSkuException;
 import com.fallguys.itemservice.domain.exception.InactiveItemCannotBeModifiedException;
 import com.fallguys.itemservice.domain.exception.InvalidItemStatusException;
+import com.fallguys.itemservice.domain.exception.ItemNotFoundException;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -120,6 +121,42 @@ class ItemControllerTest {
         mockMvc.perform(get("/api/items").param("categoryCode", "engine"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.errorCode").value("INVALID_CATEGORY_CODE"));
+    }
+
+    @Test
+    void getsItemDetailBySku() throws Exception {
+        when(itemService.getViewBySku(eq("HMC-EN-00214"))).thenReturn(itemView());
+
+        mockMvc.perform(get("/api/items/{sku}", "HMC-EN-00214"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.sku").value("HMC-EN-00214"))
+                .andExpect(jsonPath("$.name").value("엔진오일 필터 (2.0L gasoline)"))
+                .andExpect(jsonPath("$.categoryCode").value("ENGINE"))
+                .andExpect(jsonPath("$.categoryName").value("엔진"))
+                .andExpect(jsonPath("$.subCategoryCode").value("ENGINE_LUBRICATION"))
+                .andExpect(jsonPath("$.subCategoryName").value("윤활계통"))
+                .andExpect(jsonPath("$.unit").value("EA"))
+                .andExpect(jsonPath("$.unitPrice").value(15000))
+                .andExpect(jsonPath("$.safetyStock").value(120))
+                .andExpect(jsonPath("$.active").value(true))
+                .andExpect(jsonPath("$.createdAt").value("2026-06-06"))
+                .andExpect(jsonPath("$.updatedAt").value("2026-06-07"));
+
+        verify(itemService).getViewBySku("HMC-EN-00214");
+    }
+
+    @Test
+    void failsWhenDetailSkuIsInvalidOrMissing() throws Exception {
+        mockMvc.perform(get("/api/items/{sku}", "hmc.wp"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errorCode").value("INVALID_SKU_FORMAT"));
+
+        when(itemService.getViewBySku(eq("UNKNOWN")))
+                .thenThrow(new ItemNotFoundException("UNKNOWN"));
+
+        mockMvc.perform(get("/api/items/{sku}", "UNKNOWN"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.errorCode").value("ITEM_NOT_FOUND"));
     }
 
     @Test
@@ -351,11 +388,15 @@ class ItemControllerTest {
                 .thenReturn(List.of(ItemCategory.subCategory("ENGINE_LUBRICATION", "윤활계통", "ENGINE", 1, true)));
         when(itemService.activate(eq("HMC-WP-00229"))).thenReturn(statusItem(true));
         when(itemService.deactivate(eq("HMC-WP-00229"))).thenReturn(statusItem(false));
+        when(itemService.getViewBySku(eq("HMC-EN-00214"))).thenReturn(itemView());
         when(itemService.getUnits()).thenReturn(List.of(ItemUnit.EA, ItemUnit.BOX, ItemUnit.SET, ItemUnit.L));
 
         mockMvc.perform(get("/items"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.totalElements").value(1));
+        mockMvc.perform(get("/items/{sku}", "HMC-EN-00214"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.subCategoryCode").value("ENGINE_LUBRICATION"));
         mockMvc.perform(get("/items/units"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[1].unit").value("BOX"));

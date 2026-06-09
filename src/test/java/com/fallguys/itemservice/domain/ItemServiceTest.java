@@ -113,8 +113,25 @@ class ItemServiceTest {
     }
 
     @Test
+    void getsItemViewBySku() {
+        itemRepository.save(existingItem("ENG-OIL-5W30-1L", "ENGINE_OIL", true));
+
+        ItemView found = itemService.getViewBySku(" ENG-OIL-5W30-1L ");
+
+        assertAll(
+                () -> assertEquals("ENG-OIL-5W30-1L", found.sku()),
+                () -> assertEquals("ENGINE_OIL", found.categoryCode()),
+                () -> assertEquals("Category", found.categoryName()),
+                () -> assertEquals("ENGINE", found.parentCategoryCode())
+        );
+    }
+
+    @Test
     void failsWhenItemDoesNotExist() {
-        assertThrows(ItemNotFoundException.class, () -> itemService.getBySku("UNKNOWN"));
+        assertAll(
+                () -> assertThrows(ItemNotFoundException.class, () -> itemService.getBySku("UNKNOWN")),
+                () -> assertThrows(ItemNotFoundException.class, () -> itemService.getViewBySku("UNKNOWN"))
+        );
     }
 
     @Test
