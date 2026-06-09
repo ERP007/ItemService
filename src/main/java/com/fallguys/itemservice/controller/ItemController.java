@@ -4,6 +4,7 @@ import com.fallguys.itemservice.controller.dto.CodeCheckRequest;
 import com.fallguys.itemservice.controller.dto.CodeCheckResponse;
 import com.fallguys.itemservice.controller.dto.CreateItemRequest;
 import com.fallguys.itemservice.controller.dto.CreateItemResponse;
+import com.fallguys.itemservice.controller.dto.ItemDetailResponse;
 import com.fallguys.itemservice.controller.dto.ItemListResponse;
 import com.fallguys.itemservice.controller.dto.ItemRequestValidator;
 import com.fallguys.itemservice.controller.dto.ItemStatusResponse;
@@ -101,6 +102,35 @@ public class ItemController {
         PageResult<ItemView> result = itemService.searchViews(query);
 
         return ItemListResponse.from(result);
+    }
+
+    @GetMapping("/{sku}")
+    @Operation(
+            summary = "부품 상세 조회",
+            description = "IM-03 부품 상세 화면에서 SKU 기준으로 부품 마스터 상세 정보를 조회합니다. 재고 정보는 Inventory API에서 별도 조회합니다."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "부품 상세 조회 성공",
+                    content = @Content(schema = @Schema(implementation = ItemDetailResponse.class))),
+            @ApiResponse(responseCode = "400", description = "SKU 형식 오류",
+                    content = @Content(schema = @Schema(implementation = ProblemDetail.class))),
+            @ApiResponse(responseCode = "401", description = "미인증 사용자",
+                    content = @Content(schema = @Schema(implementation = ProblemDetail.class))),
+            @ApiResponse(responseCode = "403", description = "부품 상세 조회 권한 없음",
+                    content = @Content(schema = @Schema(implementation = ProblemDetail.class))),
+            @ApiResponse(responseCode = "404", description = "존재하지 않는 부품",
+                    content = @Content(schema = @Schema(implementation = ProblemDetail.class))),
+            @ApiResponse(responseCode = "500", description = "서버 내부 오류",
+                    content = @Content(schema = @Schema(implementation = ProblemDetail.class)))
+    })
+    public ItemDetailResponse getDetail(
+            @Parameter(description = "조회 대상 부품 SKU", example = "HMC-EN-00214")
+            @PathVariable String sku
+    ) {
+        String normalizedSku = ItemRequestValidator.requireSku(sku, ItemErrorCode.INVALID_SKU_FORMAT);
+        ItemView item = itemService.getViewBySku(normalizedSku);
+
+        return ItemDetailResponse.from(item);
     }
 
     @PostMapping

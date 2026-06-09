@@ -149,6 +149,26 @@ class ItemPersistenceTest {
     }
 
     @Test
+    void findsItemsBySkus() {
+        saveCategory(ItemCategory.root("ENGINE", "Engine", 1, true));
+        saveCategory(ItemCategory.subCategory("ENGINE_OIL", "Engine oil", "ENGINE", 1, true));
+        saveCategory(ItemCategory.subCategory("ENGINE_FILTER", "Engine filter", "ENGINE", 2, true));
+        itemRepository.save(item("ENG-OIL-5W30-1L", "Engine oil", "ENGINE_OIL", ItemUnit.EA, 50, 8500, true));
+        itemRepository.save(item("ENG-FILTER-A", "Oil filter", "ENGINE_FILTER", ItemUnit.SET, 5, 5000, true));
+
+        List<Item> found = itemRepository.findBySkus(List.of("ENG-FILTER-A", "UNKNOWN", "ENG-OIL-5W30-1L"));
+        List<String> foundSkus = found.stream()
+                .map(Item::getSku)
+                .toList();
+
+        assertAll(
+                () -> assertEquals(2, found.size()),
+                () -> assertTrue(foundSkus.contains("ENG-FILTER-A")),
+                () -> assertTrue(foundSkus.contains("ENG-OIL-5W30-1L"))
+        );
+    }
+
+    @Test
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
     void detectsOptimisticLockingConflict() {
         saveCategory(ItemCategory.root("ENGINE", "Engine", 1, true));

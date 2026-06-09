@@ -113,8 +113,43 @@ class ItemServiceTest {
     }
 
     @Test
+    void getsItemViewBySku() {
+        itemRepository.save(existingItem("ENG-OIL-5W30-1L", "ENGINE_OIL", true));
+
+        ItemView found = itemService.getViewBySku(" ENG-OIL-5W30-1L ");
+
+        assertAll(
+                () -> assertEquals("ENG-OIL-5W30-1L", found.sku()),
+                () -> assertEquals("ENGINE_OIL", found.categoryCode()),
+                () -> assertEquals("Category", found.categoryName()),
+                () -> assertEquals("ENGINE", found.parentCategoryCode())
+        );
+    }
+
+    @Test
+    void getsItemsBySkus() {
+        itemRepository.save(existingItem("ENG-OIL-5W30-1L", "ENGINE_OIL", true));
+        itemRepository.save(existingItem("ENG-FILTER-A", "ENGINE_FILTER", true));
+
+        List<Item> found = itemService.getBySkus(List.of("UNKNOWN", "ENG-FILTER-A", "ENG-OIL-5W30-1L"));
+        List<String> foundSkus = found.stream()
+                .map(Item::getSku)
+                .toList();
+
+        assertEquals(List.of("ENG-FILTER-A", "ENG-OIL-5W30-1L"), foundSkus);
+    }
+
+    @Test
+    void returnsEmptyWhenBatchSkuListIsEmpty() {
+        assertTrue(itemService.getBySkus(List.of()).isEmpty());
+    }
+
+    @Test
     void failsWhenItemDoesNotExist() {
-        assertThrows(ItemNotFoundException.class, () -> itemService.getBySku("UNKNOWN"));
+        assertAll(
+                () -> assertThrows(ItemNotFoundException.class, () -> itemService.getBySku("UNKNOWN")),
+                () -> assertThrows(ItemNotFoundException.class, () -> itemService.getViewBySku("UNKNOWN"))
+        );
     }
 
     @Test
@@ -298,6 +333,18 @@ class ItemServiceTest {
         @Override
         public Optional<Item> findBySku(String sku) {
             return Optional.ofNullable(items.get(sku));
+        }
+
+        @Override
+        public List<Item> findBySkus(List<String> skus) {
+            List<Item> found = new ArrayList<>();
+            for (String sku : skus) {
+                Item item = items.get(sku);
+                if (item != null) {
+                    found.add(item);
+                }
+            }
+            return found;
         }
 
         @Override
