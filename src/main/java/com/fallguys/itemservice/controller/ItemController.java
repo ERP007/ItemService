@@ -45,7 +45,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
-@RequestMapping({"/api/items", "/items"})
+@RequestMapping({"/items"})
 @RestController
 @Tag(name = "Items", description = "부품 마스터 목록, 등록, 수정, SKU 중복 확인 API")
 public class ItemController {
