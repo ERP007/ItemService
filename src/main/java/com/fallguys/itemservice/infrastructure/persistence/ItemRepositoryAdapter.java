@@ -38,6 +38,16 @@ public class ItemRepositoryAdapter implements ItemRepository {
     }
 
     @Override
+    public List<Item> findBySkus(List<String> skus) {
+        if (skus.isEmpty()) {
+            return List.of();
+        }
+        return jpaDao.findAllById(skus).stream()
+                .map(ItemEntity::toDomain)
+                .toList();
+    }
+
+    @Override
     public Optional<ItemView> findViewBySku(String sku) {
         List<ItemView> result = entityManager.createQuery("""
                         select new com.fallguys.itemservice.domain.ItemView(

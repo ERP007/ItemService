@@ -39,6 +39,7 @@ class OpenApiDocumentationTest {
                 .andExpect(jsonPath("$.paths['/api/items/categories/{categoryCode}/sub-categories']").exists())
                 .andExpect(jsonPath("$.paths['/items']").doesNotExist())
                 .andExpect(jsonPath("$.paths['/internal/items/{sku}']").doesNotExist())
+                .andExpect(jsonPath("$.paths['/internal/items/batch']").doesNotExist())
                 .andExpect(jsonPath("$.paths['/items/health']").doesNotExist());
     }
 

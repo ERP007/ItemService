@@ -4,6 +4,8 @@ import com.fallguys.itemservice.domain.ItemUnit;
 import com.fallguys.itemservice.domain.exception.InvalidItemRequestException;
 import com.fallguys.itemservice.domain.exception.ItemErrorCode;
 
+import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.regex.Pattern;
 
 public final class ItemRequestValidator {
@@ -23,6 +25,21 @@ public final class ItemRequestValidator {
             throw new InvalidItemRequestException(ItemErrorCode.INVALID_SKU_FORMAT, "Invalid SKU format: " + normalizedSku);
         }
         return normalizedSku;
+    }
+
+    public static List<String> requireSkus(List<String> skus, int maxSize) {
+        if (skus == null || skus.isEmpty()) {
+            throw new InvalidItemRequestException(ItemErrorCode.SKUS_REQUIRED, "SKUs are required.");
+        }
+
+        LinkedHashSet<String> normalizedSkus = new LinkedHashSet<>();
+        for (String sku : skus) {
+            normalizedSkus.add(requireSku(sku, ItemErrorCode.INVALID_SKU_FORMAT));
+        }
+        if (normalizedSkus.size() > maxSize) {
+            throw new InvalidItemRequestException(ItemErrorCode.TOO_MANY_SKUS, "Too many SKUs. max=" + maxSize);
+        }
+        return List.copyOf(normalizedSkus);
     }
 
     public static String requireNameForCreate(String name) {

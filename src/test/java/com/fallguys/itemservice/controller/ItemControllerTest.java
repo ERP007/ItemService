@@ -195,6 +195,103 @@ class ItemControllerTest {
     }
 
     @Test
+    void getsInternalItemsBySkus() throws Exception {
+        when(itemService.getBySkus(eq(List.of("HMC-WP-00229", "HMC-NO-99999", "HMC-EN-00214"))))
+                .thenReturn(List.of(internalItem(), internalItem("HMC-WP-00229", "워터 펌프 어셈블리")));
+
+        mockMvc.perform(post("/internal/items/batch")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "skus": ["HMC-WP-00229", "HMC-NO-99999", "HMC-EN-00214"]
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items[0].sku").value("HMC-WP-00229"))
+                .andExpect(jsonPath("$.items[1].sku").value("HMC-EN-00214"))
+                .andExpect(jsonPath("$.items[1].name").value("엔진오일 필터 (2.0L gasoline)"))
+                .andExpect(jsonPath("$.items[1].categoryCode").value("ENGINE_LUBRICATION"))
+                .andExpect(jsonPath("$.items[1].unit").value("EA"))
+                .andExpect(jsonPath("$.items[1].unitPrice").value(15000))
+                .andExpect(jsonPath("$.items[1].safetyStock").value(120))
+                .andExpect(jsonPath("$.items[1].active").value(true))
+                .andExpect(jsonPath("$.items[1].categoryName").doesNotExist())
+                .andExpect(jsonPath("$.items[1].subCategoryCode").doesNotExist())
+                .andExpect(jsonPath("$.items[1].createdAt").doesNotExist())
+                .andExpect(jsonPath("$.items[1].updatedAt").doesNotExist())
+                .andExpect(jsonPath("$.notFoundSkus[0]").value("HMC-NO-99999"));
+
+        verify(itemService).getBySkus(List.of("HMC-WP-00229", "HMC-NO-99999", "HMC-EN-00214"));
+    }
+
+    @Test
+    void deduplicatesInternalBatchSkus() throws Exception {
+        when(itemService.getBySkus(eq(List.of("HMC-EN-00214", "HMC-WP-00229"))))
+                .thenReturn(List.of(internalItem(), internalItem("HMC-WP-00229", "워터 펌프 어셈블리")));
+
+        mockMvc.perform(post("/internal/items/batch")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "skus": ["HMC-EN-00214", "HMC-EN-00214", "HMC-WP-00229"]
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items.length()").value(2))
+                .andExpect(jsonPath("$.items[0].sku").value("HMC-EN-00214"))
+                .andExpect(jsonPath("$.items[1].sku").value("HMC-WP-00229"))
+                .andExpect(jsonPath("$.notFoundSkus.length()").value(0));
+
+        verify(itemService).getBySkus(List.of("HMC-EN-00214", "HMC-WP-00229"));
+    }
+
+    @Test
+    void failsWhenInternalBatchSkusAreMissingOrInvalid() throws Exception {
+        mockMvc.perform(post("/internal/items/batch"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errorCode").value("SKUS_REQUIRED"));
+
+        mockMvc.perform(post("/internal/items/batch")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errorCode").value("SKUS_REQUIRED"));
+
+        mockMvc.perform(post("/internal/items/batch")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "skus": []
+                                }
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errorCode").value("SKUS_REQUIRED"));
+
+        mockMvc.perform(post("/internal/items/batch")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "skus": ["HMC-EN-00214", "hmc.wp"]
+                                }
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errorCode").value("INVALID_SKU_FORMAT"));
+    }
+
+    @Test
+    void failsWhenInternalBatchHasTooManySkus() throws Exception {
+        String content = java.util.stream.IntStream.rangeClosed(1, 101)
+                .mapToObj(number -> "\"HMC-EN-" + String.format("%05d", number) + "\"")
+                .collect(java.util.stream.Collectors.joining(",", "{\"skus\":[", "]}"));
+
+        mockMvc.perform(post("/internal/items/batch")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(content))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errorCode").value("TOO_MANY_SKUS"));
+    }
+
+    @Test
     void createsItem() throws Exception {
         when(itemService.createView(any(CreateItemCommand.class))).thenReturn(itemView());
 
@@ -481,9 +578,13 @@ class ItemControllerTest {
     }
 
     private static Item internalItem() {
+        return internalItem("HMC-EN-00214", "엔진오일 필터 (2.0L gasoline)");
+    }
+
+    private static Item internalItem(String sku, String name) {
         return Item.of(
-                "HMC-EN-00214",
-                "엔진오일 필터 (2.0L gasoline)",
+                sku,
+                name,
                 "ENGINE_LUBRICATION",
                 ItemUnit.EA,
                 120,
