@@ -39,7 +39,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@WebMvcTest(controllers = {ItemController.class, ItemCategoryController.class})
+@WebMvcTest(controllers = {ItemController.class, ItemCategoryController.class, InternalItemController.class})
 class ItemControllerTest {
 
     private static final Instant CREATED_AT = Instant.parse("2026-06-06T10:30:00Z");
@@ -155,6 +155,41 @@ class ItemControllerTest {
                 .thenThrow(new ItemNotFoundException("UNKNOWN"));
 
         mockMvc.perform(get("/api/items/{sku}", "UNKNOWN"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.errorCode").value("ITEM_NOT_FOUND"));
+    }
+
+    @Test
+    void getsInternalItemBySku() throws Exception {
+        when(itemService.getBySku(eq("HMC-EN-00214"))).thenReturn(internalItem());
+
+        mockMvc.perform(get("/internal/items/{sku}", "HMC-EN-00214"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.sku").value("HMC-EN-00214"))
+                .andExpect(jsonPath("$.name").value("엔진오일 필터 (2.0L gasoline)"))
+                .andExpect(jsonPath("$.categoryCode").value("ENGINE_LUBRICATION"))
+                .andExpect(jsonPath("$.unit").value("EA"))
+                .andExpect(jsonPath("$.unitPrice").value(15000))
+                .andExpect(jsonPath("$.safetyStock").value(120))
+                .andExpect(jsonPath("$.active").value(true))
+                .andExpect(jsonPath("$.categoryName").doesNotExist())
+                .andExpect(jsonPath("$.subCategoryCode").doesNotExist())
+                .andExpect(jsonPath("$.createdAt").doesNotExist())
+                .andExpect(jsonPath("$.updatedAt").doesNotExist());
+
+        verify(itemService).getBySku("HMC-EN-00214");
+    }
+
+    @Test
+    void failsWhenInternalSkuIsInvalidOrMissing() throws Exception {
+        mockMvc.perform(get("/internal/items/{sku}", "hmc.wp"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errorCode").value("INVALID_SKU_FORMAT"));
+
+        when(itemService.getBySku(eq("UNKNOWN")))
+                .thenThrow(new ItemNotFoundException("UNKNOWN"));
+
+        mockMvc.perform(get("/internal/items/{sku}", "UNKNOWN"))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.errorCode").value("ITEM_NOT_FOUND"));
     }
@@ -436,6 +471,20 @@ class ItemControllerTest {
                 "윤활계통",
                 "ENGINE",
                 "엔진",
+                ItemUnit.EA,
+                120,
+                15000,
+                true,
+                CREATED_AT,
+                UPDATED_AT
+        );
+    }
+
+    private static Item internalItem() {
+        return Item.of(
+                "HMC-EN-00214",
+                "엔진오일 필터 (2.0L gasoline)",
+                "ENGINE_LUBRICATION",
                 ItemUnit.EA,
                 120,
                 15000,
