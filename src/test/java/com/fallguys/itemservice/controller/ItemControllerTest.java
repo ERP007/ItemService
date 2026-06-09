@@ -1,5 +1,8 @@
 package com.fallguys.itemservice.controller;
 
+import com.fallguys.itemservice.controller.security.JwtRoleConverter;
+import com.fallguys.itemservice.controller.security.SecurityConfig;
+import com.fallguys.itemservice.controller.security.SecurityProblemHandler;
 import com.fallguys.itemservice.domain.CreateItemCommand;
 import com.fallguys.itemservice.domain.Item;
 import com.fallguys.itemservice.domain.ItemCategory;
@@ -21,10 +24,13 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
+import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
+import org.springframework.test.web.servlet.request.RequestPostProcessor;
 
 import java.time.Instant;
 import java.util.List;
@@ -33,6 +39,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -40,10 +47,31 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(controllers = {ItemController.class, ItemCategoryController.class, InternalItemController.class})
+@Import({SecurityConfig.class, SecurityProblemHandler.class})
 class ItemControllerTest {
 
     private static final Instant CREATED_AT = Instant.parse("2026-06-06T10:30:00Z");
     private static final Instant UPDATED_AT = Instant.parse("2026-06-07T10:30:00Z");
+    private static final String VALID_CREATE_JSON = """
+            {
+              "sku": "HMC-EN-00214",
+              "name": "엔진오일 필터 (2.0L gasoline)",
+              "categoryCode": "ENGINE_LUBRICATION",
+              "unit": "EA",
+              "safetyStock": 120,
+              "unitPrice": 15000
+            }
+            """;
+    private static final String VALID_UPDATE_JSON = """
+            {
+              "name": "엔진오일 필터 (2.0L gasoline)",
+              "categoryCode": "ENGINE",
+              "subCategoryCode": "ENGINE_LUBRICATION",
+              "unit": "EA",
+              "unitPrice": 15000,
+              "safetyStock": 120
+            }
+            """;
 
     @Autowired
     private MockMvc mockMvc;
@@ -54,12 +82,151 @@ class ItemControllerTest {
     @MockitoBean
     private ItemCategoryService itemCategoryService;
 
+    private static RequestPostProcessor adminJwt() {
+        return roleJwt("ADMIN");
+    }
+
+    private static RequestPostProcessor roleJwt(String role) {
+        return jwt()
+                .jwt(jwt -> jwt.claim("user_role", role))
+                .authorities(new JwtRoleConverter());
+    }
+
+    private static RequestPostProcessor jwtWithoutRole() {
+        return jwt().authorities(new JwtRoleConverter());
+    }
+
+    private static MockHttpServletRequestBuilder createItemRequest() {
+        return post("/api/items")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(VALID_CREATE_JSON);
+    }
+
+    private static MockHttpServletRequestBuilder updateItemRequest() {
+        return patch("/api/items/{sku}", "HMC-EN-00214")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(VALID_UPDATE_JSON);
+    }
+
+    private static MockHttpServletRequestBuilder activateItemRequest() {
+        return patch("/api/items/{sku}/activate", "HMC-WP-00229");
+    }
+
+    private static MockHttpServletRequestBuilder deactivateItemRequest() {
+        return patch("/api/items/{sku}/deactivate", "HMC-WP-00229");
+    }
+
+    private static MockHttpServletRequestBuilder codeCheckRequest() {
+        return post("/api/items/code-check")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {
+                          "sku": "HMC-EN-00214"
+                        }
+                        """);
+    }
+
+    @Test
+    void allowsWriteApisForAdminAndHeadOfficeRoles() throws Exception {
+        when(itemService.createView(any(CreateItemCommand.class))).thenReturn(itemView());
+        when(itemService.updateSelection(any(UpdateItemSelectionCommand.class))).thenReturn(itemView());
+        when(itemService.activate(eq("HMC-WP-00229"))).thenReturn(statusItem(true));
+        when(itemService.deactivate(eq("HMC-WP-00229"))).thenReturn(statusItem(false));
+        when(itemService.isSkuAvailable(eq("HMC-EN-00214"))).thenReturn(true);
+
+        for (String role : List.of("ADMIN", "HQ_MANAGER", "HQ_STAFF")) {
+            mockMvc.perform(createItemRequest().with(roleJwt(role)))
+                    .andExpect(status().isCreated());
+            mockMvc.perform(updateItemRequest().with(roleJwt(role)))
+                    .andExpect(status().isOk());
+            mockMvc.perform(activateItemRequest().with(roleJwt(role)))
+                    .andExpect(status().isOk());
+            mockMvc.perform(deactivateItemRequest().with(roleJwt(role)))
+                    .andExpect(status().isOk());
+            mockMvc.perform(codeCheckRequest().with(roleJwt(role)))
+                    .andExpect(status().isOk());
+        }
+    }
+
+    @Test
+    void rejectsWriteApisForBranchRoles() throws Exception {
+        for (String role : List.of("BRANCH_MANAGER", "BRANCH_STAFF")) {
+            mockMvc.perform(createItemRequest().with(roleJwt(role)))
+                    .andExpect(status().isForbidden())
+                    .andExpect(jsonPath("$.errorCode").value("FORBIDDEN"));
+            mockMvc.perform(updateItemRequest().with(roleJwt(role)))
+                    .andExpect(status().isForbidden())
+                    .andExpect(jsonPath("$.errorCode").value("FORBIDDEN"));
+            mockMvc.perform(activateItemRequest().with(roleJwt(role)))
+                    .andExpect(status().isForbidden())
+                    .andExpect(jsonPath("$.errorCode").value("FORBIDDEN"));
+            mockMvc.perform(deactivateItemRequest().with(roleJwt(role)))
+                    .andExpect(status().isForbidden())
+                    .andExpect(jsonPath("$.errorCode").value("FORBIDDEN"));
+            mockMvc.perform(codeCheckRequest().with(roleJwt(role)))
+                    .andExpect(status().isForbidden())
+                    .andExpect(jsonPath("$.errorCode").value("FORBIDDEN"));
+        }
+    }
+
+    @Test
+    void rejectsUnauthenticatedWriteApis() throws Exception {
+        mockMvc.perform(createItemRequest())
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.errorCode").value("UNAUTHORIZED"));
+        mockMvc.perform(updateItemRequest())
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.errorCode").value("UNAUTHORIZED"));
+        mockMvc.perform(activateItemRequest())
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.errorCode").value("UNAUTHORIZED"));
+        mockMvc.perform(deactivateItemRequest())
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.errorCode").value("UNAUTHORIZED"));
+        mockMvc.perform(codeCheckRequest())
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.errorCode").value("UNAUTHORIZED"));
+    }
+
+    @Test
+    void allowsReadApisForBranchStaff() throws Exception {
+        when(itemService.searchViews(any(SearchItemsQuery.class)))
+                .thenReturn(new PageResult<>(List.of(itemView()), 0, 10, 1));
+        when(itemService.getViewBySku(eq("HMC-EN-00214"))).thenReturn(itemView());
+        when(itemService.getUnits()).thenReturn(List.of(ItemUnit.EA));
+        when(itemCategoryService.findRootCategories())
+                .thenReturn(List.of(ItemCategory.root("ENGINE", "엔진", 1, true)));
+        when(itemCategoryService.findSubCategories(eq("ENGINE")))
+                .thenReturn(List.of(ItemCategory.subCategory("ENGINE_LUBRICATION", "윤활계통", "ENGINE", 1, true)));
+
+        mockMvc.perform(get("/api/items").with(roleJwt("BRANCH_STAFF")))
+                .andExpect(status().isOk());
+        mockMvc.perform(get("/api/items/{sku}", "HMC-EN-00214").with(roleJwt("BRANCH_STAFF")))
+                .andExpect(status().isOk());
+        mockMvc.perform(get("/api/items/units").with(roleJwt("BRANCH_STAFF")))
+                .andExpect(status().isOk());
+        mockMvc.perform(get("/api/items/categories").with(roleJwt("BRANCH_STAFF")))
+                .andExpect(status().isOk());
+        mockMvc.perform(get("/api/items/categories/{categoryCode}/sub-categories", "ENGINE").with(roleJwt("BRANCH_STAFF")))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void rejectsUserApisWhenJwtRoleClaimIsMissingOrUnknown() throws Exception {
+        mockMvc.perform(get("/api/items").with(jwtWithoutRole()))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.errorCode").value("FORBIDDEN"));
+        mockMvc.perform(get("/api/items").with(roleJwt("UNKNOWN")))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.errorCode").value("FORBIDDEN"));
+    }
+
     @Test
     void searchesItemsWithDefaultsAndReturnsOneBasedPage() throws Exception {
         when(itemService.searchViews(any(SearchItemsQuery.class)))
                 .thenReturn(new PageResult<>(List.of(itemView()), 0, 10, 11));
 
-        mockMvc.perform(get("/api/items"))
+        mockMvc.perform(get("/api/items").with(adminJwt()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content[0].sku").value("HMC-EN-00214"))
                 .andExpect(jsonPath("$.content[0].categoryCode").value("ENGINE_LUBRICATION"))
@@ -94,7 +261,8 @@ class ItemControllerTest {
                         .param("status", "ACTIVE")
                         .param("page", "2")
                         .param("size", "20")
-                        .param("sort", "safetyStock,asc"))
+                        .param("sort", "safetyStock,asc")
+                        .with(adminJwt()))
                 .andExpect(status().isOk());
 
         ArgumentCaptor<SearchItemsQuery> captor = ArgumentCaptor.forClass(SearchItemsQuery.class);
@@ -113,12 +281,12 @@ class ItemControllerTest {
 
     @Test
     void failsWhenSearchParameterIsInvalid() throws Exception {
-        mockMvc.perform(get("/api/items").param("status", "UNKNOWN"))
+        mockMvc.perform(get("/api/items").param("status", "UNKNOWN").with(adminJwt()))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.errorCode").value("INVALID_PARAMETER"))
                 .andExpect(jsonPath("$.timestamp").exists());
 
-        mockMvc.perform(get("/api/items").param("categoryCode", "engine"))
+        mockMvc.perform(get("/api/items").param("categoryCode", "engine").with(adminJwt()))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.errorCode").value("INVALID_CATEGORY_CODE"));
     }
@@ -127,7 +295,7 @@ class ItemControllerTest {
     void getsItemDetailBySku() throws Exception {
         when(itemService.getViewBySku(eq("HMC-EN-00214"))).thenReturn(itemView());
 
-        mockMvc.perform(get("/api/items/{sku}", "HMC-EN-00214"))
+        mockMvc.perform(get("/api/items/{sku}", "HMC-EN-00214").with(adminJwt()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.sku").value("HMC-EN-00214"))
                 .andExpect(jsonPath("$.name").value("엔진오일 필터 (2.0L gasoline)"))
@@ -147,14 +315,14 @@ class ItemControllerTest {
 
     @Test
     void failsWhenDetailSkuIsInvalidOrMissing() throws Exception {
-        mockMvc.perform(get("/api/items/{sku}", "hmc.wp"))
+        mockMvc.perform(get("/api/items/{sku}", "hmc.wp").with(adminJwt()))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.errorCode").value("INVALID_SKU_FORMAT"));
 
         when(itemService.getViewBySku(eq("UNKNOWN")))
                 .thenThrow(new ItemNotFoundException("UNKNOWN"));
 
-        mockMvc.perform(get("/api/items/{sku}", "UNKNOWN"))
+        mockMvc.perform(get("/api/items/{sku}", "UNKNOWN").with(adminJwt()))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.errorCode").value("ITEM_NOT_FOUND"));
     }
@@ -306,7 +474,8 @@ class ItemControllerTest {
                                   "safetyStock": 120,
                                   "unitPrice": 15000
                                 }
-                                """))
+                                """)
+                        .with(adminJwt()))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.sku").value("HMC-EN-00214"))
                 .andExpect(jsonPath("$.parentCategoryCode").value("ENGINE"))
@@ -326,7 +495,8 @@ class ItemControllerTest {
                                   "safetyStock": 120,
                                   "unitPrice": 15000
                                 }
-                                """))
+                                """)
+                        .with(adminJwt()))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.errorCode").value("SKU_REQUIRED"));
 
@@ -344,7 +514,8 @@ class ItemControllerTest {
                                   "safetyStock": 120,
                                   "unitPrice": 15000
                                 }
-                                """))
+                                """)
+                        .with(adminJwt()))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.errorCode").value("DUPLICATE_SKU"));
     }
@@ -364,7 +535,8 @@ class ItemControllerTest {
                                   "unitPrice": 15000,
                                   "safetyStock": 120
                                 }
-                                """))
+                                """)
+                        .with(adminJwt()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.categoryCode").value("ENGINE"))
                 .andExpect(jsonPath("$.subCategoryCode").value("ENGINE_LUBRICATION"));
@@ -386,7 +558,8 @@ class ItemControllerTest {
                                   "unitPrice": 15000,
                                   "safetyStock": 120
                                 }
-                                """))
+                                """)
+                        .with(adminJwt()))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.errorCode").value("INACTIVE_ITEM_CANNOT_BE_MODIFIED"));
     }
@@ -395,7 +568,7 @@ class ItemControllerTest {
     void activatesItem() throws Exception {
         when(itemService.activate(eq("HMC-WP-00229"))).thenReturn(statusItem(true));
 
-        mockMvc.perform(patch("/api/items/{sku}/activate", "HMC-WP-00229"))
+        mockMvc.perform(patch("/api/items/{sku}/activate", "HMC-WP-00229").with(adminJwt()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.sku").value("HMC-WP-00229"))
                 .andExpect(jsonPath("$.name").value("워터 펌프 어셈블리 (구형)"))
@@ -409,7 +582,7 @@ class ItemControllerTest {
     void deactivatesItem() throws Exception {
         when(itemService.deactivate(eq("HMC-WP-00229"))).thenReturn(statusItem(false));
 
-        mockMvc.perform(patch("/api/items/{sku}/deactivate", "HMC-WP-00229"))
+        mockMvc.perform(patch("/api/items/{sku}/deactivate", "HMC-WP-00229").with(adminJwt()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.sku").value("HMC-WP-00229"))
                 .andExpect(jsonPath("$.active").value(false))
@@ -420,7 +593,7 @@ class ItemControllerTest {
 
     @Test
     void failsWhenStatusChangeSkuIsInvalid() throws Exception {
-        mockMvc.perform(patch("/api/items/{sku}/activate", "hmc.wp"))
+        mockMvc.perform(patch("/api/items/{sku}/activate", "hmc.wp").with(adminJwt()))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.errorCode").value("INVALID_SKU_FORMAT"));
     }
@@ -430,7 +603,7 @@ class ItemControllerTest {
         when(itemService.activate(eq("HMC-WP-00229")))
                 .thenThrow(InvalidItemStatusException.alreadyActive("HMC-WP-00229"));
 
-        mockMvc.perform(patch("/api/items/{sku}/activate", "HMC-WP-00229"))
+        mockMvc.perform(patch("/api/items/{sku}/activate", "HMC-WP-00229").with(adminJwt()))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.errorCode").value("INVALID_ITEM_STATUS"));
     }
@@ -440,7 +613,7 @@ class ItemControllerTest {
         when(itemService.deactivate(eq("HMC-WP-00229")))
                 .thenThrow(new ObjectOptimisticLockingFailureException(Item.class, "HMC-WP-00229"));
 
-        mockMvc.perform(patch("/api/items/{sku}/deactivate", "HMC-WP-00229"))
+        mockMvc.perform(patch("/api/items/{sku}/deactivate", "HMC-WP-00229").with(adminJwt()))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.errorCode").value("CONCURRENT_MODIFICATION"));
     }
@@ -455,7 +628,8 @@ class ItemControllerTest {
                                 {
                                   "sku": "HMC-EN-00214"
                                 }
-                                """))
+                                """)
+                        .with(adminJwt()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.sku").value("HMC-EN-00214"))
                 .andExpect(jsonPath("$.available").value(false))
@@ -466,7 +640,7 @@ class ItemControllerTest {
     void findsUnits() throws Exception {
         when(itemService.getUnits()).thenReturn(List.of(ItemUnit.EA, ItemUnit.BOX, ItemUnit.SET, ItemUnit.L));
 
-        mockMvc.perform(get("/api/items/units"))
+        mockMvc.perform(get("/api/items/units").with(adminJwt()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].unit").value("EA"))
                 .andExpect(jsonPath("$[0].name").value("EA"))
@@ -485,7 +659,7 @@ class ItemControllerTest {
         when(itemCategoryService.findRootCategories())
                 .thenReturn(List.of(ItemCategory.root("ENGINE", "엔진", 1, true)));
 
-        mockMvc.perform(get("/api/items/categories"))
+        mockMvc.perform(get("/api/items/categories").with(adminJwt()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].categoryCode").value("ENGINE"))
                 .andExpect(jsonPath("$[0].categoryName").value("엔진"))
@@ -497,7 +671,7 @@ class ItemControllerTest {
         when(itemCategoryService.findSubCategories(eq("ENGINE")))
                 .thenReturn(List.of(ItemCategory.subCategory("ENGINE_LUBRICATION", "윤활계통", "ENGINE", 1, true)));
 
-        mockMvc.perform(get("/api/items/categories/{categoryCode}/sub-categories", "ENGINE"))
+        mockMvc.perform(get("/api/items/categories/{categoryCode}/sub-categories", "ENGINE").with(adminJwt()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].categoryCode").value("ENGINE_LUBRICATION"))
                 .andExpect(jsonPath("$[0].parentCategoryCode").value("ENGINE"));
@@ -505,7 +679,7 @@ class ItemControllerTest {
         when(itemCategoryService.findSubCategories(eq("UNKNOWN")))
                 .thenThrow(new CategoryNotFoundException("UNKNOWN"));
 
-        mockMvc.perform(get("/api/items/categories/{categoryCode}/sub-categories", "UNKNOWN"))
+        mockMvc.perform(get("/api/items/categories/{categoryCode}/sub-categories", "UNKNOWN").with(adminJwt()))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.errorCode").value("CATEGORY_NOT_FOUND"));
     }
@@ -523,25 +697,25 @@ class ItemControllerTest {
         when(itemService.getViewBySku(eq("HMC-EN-00214"))).thenReturn(itemView());
         when(itemService.getUnits()).thenReturn(List.of(ItemUnit.EA, ItemUnit.BOX, ItemUnit.SET, ItemUnit.L));
 
-        mockMvc.perform(get("/items"))
+        mockMvc.perform(get("/items").with(adminJwt()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.totalElements").value(1));
-        mockMvc.perform(get("/items/{sku}", "HMC-EN-00214"))
+        mockMvc.perform(get("/items/{sku}", "HMC-EN-00214").with(adminJwt()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.subCategoryCode").value("ENGINE_LUBRICATION"));
-        mockMvc.perform(get("/items/units"))
+        mockMvc.perform(get("/items/units").with(adminJwt()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[1].unit").value("BOX"));
-        mockMvc.perform(get("/items/categories"))
+        mockMvc.perform(get("/items/categories").with(adminJwt()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].categoryCode").value("ENGINE"));
-        mockMvc.perform(get("/items/categories/{categoryCode}/sub-categories", "ENGINE"))
+        mockMvc.perform(get("/items/categories/{categoryCode}/sub-categories", "ENGINE").with(adminJwt()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].categoryCode").value("ENGINE_LUBRICATION"));
-        mockMvc.perform(patch("/items/{sku}/activate", "HMC-WP-00229"))
+        mockMvc.perform(patch("/items/{sku}/activate", "HMC-WP-00229").with(adminJwt()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.active").value(true));
-        mockMvc.perform(patch("/items/{sku}/deactivate", "HMC-WP-00229"))
+        mockMvc.perform(patch("/items/{sku}/deactivate", "HMC-WP-00229").with(adminJwt()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.active").value(false));
     }
