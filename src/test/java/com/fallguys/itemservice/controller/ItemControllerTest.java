@@ -329,23 +329,63 @@ class ItemControllerTest {
 
     @Test
     void getsInternalItemBySku() throws Exception {
-        when(itemService.getBySku(eq("HMC-EN-00214"))).thenReturn(internalItem());
+        when(itemService.getViewBySku(eq("HMC-EN-00214"))).thenReturn(itemView());
 
         mockMvc.perform(get("/internal/items/{sku}", "HMC-EN-00214"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.sku").value("HMC-EN-00214"))
                 .andExpect(jsonPath("$.name").value("엔진오일 필터 (2.0L gasoline)"))
-                .andExpect(jsonPath("$.categoryCode").value("ENGINE_LUBRICATION"))
+                .andExpect(jsonPath("$.majorCategory").value("엔진"))
+                .andExpect(jsonPath("$.middleCategory").value("윤활계통"))
                 .andExpect(jsonPath("$.unit").value("EA"))
                 .andExpect(jsonPath("$.unitPrice").value(15000))
                 .andExpect(jsonPath("$.safetyStock").value(120))
                 .andExpect(jsonPath("$.active").value(true))
+                .andExpect(jsonPath("$.categoryCode").doesNotExist())
                 .andExpect(jsonPath("$.categoryName").doesNotExist())
                 .andExpect(jsonPath("$.subCategoryCode").doesNotExist())
+                .andExpect(jsonPath("$.subCategoryName").doesNotExist())
                 .andExpect(jsonPath("$.createdAt").doesNotExist())
                 .andExpect(jsonPath("$.updatedAt").doesNotExist());
 
-        verify(itemService).getBySku("HMC-EN-00214");
+        verify(itemService).getViewBySku("HMC-EN-00214");
+    }
+
+    @Test
+    void getsInternalItemBySkuWhenCategoryHasNoParent() throws Exception {
+        when(itemService.getViewBySku(eq("HMC-EN-00001"))).thenReturn(rootCategoryItemView());
+
+        mockMvc.perform(get("/internal/items/{sku}", "HMC-EN-00001"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.sku").value("HMC-EN-00001"))
+                .andExpect(jsonPath("$.majorCategory").value("엔진"))
+                .andExpect(jsonPath("$.middleCategory").value(""));
+
+        verify(itemService).getViewBySku("HMC-EN-00001");
+    }
+
+    @Test
+    void getsInternalItemCategoryBySku() throws Exception {
+        when(itemService.getViewBySku(eq("HMC-EN-00214"))).thenReturn(itemView());
+        when(itemService.getViewBySku(eq("HMC-EN-00001"))).thenReturn(rootCategoryItemView());
+
+        mockMvc.perform(get("/internal/items/category/{sku}", "HMC-EN-00214"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.sku").value("HMC-EN-00214"))
+                .andExpect(jsonPath("$.majorCategory").value("엔진"))
+                .andExpect(jsonPath("$.middleCategory").value("윤활계통"))
+                .andExpect(jsonPath("$.name").doesNotExist())
+                .andExpect(jsonPath("$.unit").doesNotExist())
+                .andExpect(jsonPath("$.active").doesNotExist());
+
+        mockMvc.perform(get("/internal/items/category/{sku}", "HMC-EN-00001"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.sku").value("HMC-EN-00001"))
+                .andExpect(jsonPath("$.majorCategory").value("엔진"))
+                .andExpect(jsonPath("$.middleCategory").value(""));
+
+        verify(itemService).getViewBySku("HMC-EN-00214");
+        verify(itemService).getViewBySku("HMC-EN-00001");
     }
 
     @Test
@@ -354,10 +394,24 @@ class ItemControllerTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.errorCode").value("INVALID_SKU_FORMAT"));
 
-        when(itemService.getBySku(eq("UNKNOWN")))
+        when(itemService.getViewBySku(eq("UNKNOWN")))
                 .thenThrow(new ItemNotFoundException("UNKNOWN"));
 
         mockMvc.perform(get("/internal/items/{sku}", "UNKNOWN"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.errorCode").value("ITEM_NOT_FOUND"));
+    }
+
+    @Test
+    void failsWhenInternalCategorySkuIsInvalidOrMissing() throws Exception {
+        mockMvc.perform(get("/internal/items/category/{sku}", "hmc.wp"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errorCode").value("INVALID_SKU_FORMAT"));
+
+        when(itemService.getViewBySku(eq("UNKNOWN")))
+                .thenThrow(new ItemNotFoundException("UNKNOWN"));
+
+        mockMvc.perform(get("/internal/items/category/{sku}", "UNKNOWN"))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.errorCode").value("ITEM_NOT_FOUND"));
     }
@@ -742,6 +796,23 @@ class ItemControllerTest {
                 "윤활계통",
                 "ENGINE",
                 "엔진",
+                ItemUnit.EA,
+                120,
+                15000,
+                true,
+                CREATED_AT,
+                UPDATED_AT
+        );
+    }
+
+    private static ItemView rootCategoryItemView() {
+        return new ItemView(
+                "HMC-EN-00001",
+                "엔진 어셈블리",
+                "ENGINE",
+                "엔진",
+                null,
+                null,
                 ItemUnit.EA,
                 120,
                 15000,
