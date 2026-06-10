@@ -2,10 +2,13 @@ package com.fallguys.itemservice.controller;
 
 import com.fallguys.itemservice.controller.dto.InternalItemBatchRequest;
 import com.fallguys.itemservice.controller.dto.InternalItemBatchResponse;
+import com.fallguys.itemservice.controller.dto.InternalItemCategoryResponse;
+import com.fallguys.itemservice.controller.dto.InternalItemDetailResponse;
 import com.fallguys.itemservice.controller.dto.InternalItemResponse;
 import com.fallguys.itemservice.controller.dto.ItemRequestValidator;
 import com.fallguys.itemservice.domain.Item;
 import com.fallguys.itemservice.domain.ItemService;
+import com.fallguys.itemservice.domain.ItemView;
 import com.fallguys.itemservice.domain.exception.InvalidItemRequestException;
 import com.fallguys.itemservice.domain.exception.ItemErrorCode;
 import io.swagger.v3.oas.annotations.Operation;
@@ -43,7 +46,7 @@ public class InternalItemController {
     )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "내부 부품 조회 성공",
-                    content = @Content(schema = @Schema(implementation = InternalItemResponse.class))),
+                    content = @Content(schema = @Schema(implementation = InternalItemDetailResponse.class))),
             @ApiResponse(responseCode = "400", description = "SKU 형식 오류",
                     content = @Content(schema = @Schema(implementation = ProblemDetail.class))),
             @ApiResponse(responseCode = "401", description = "내부 인증 실패",
@@ -55,14 +58,43 @@ public class InternalItemController {
             @ApiResponse(responseCode = "500", description = "서버 내부 오류",
                     content = @Content(schema = @Schema(implementation = ProblemDetail.class)))
     })
-    public InternalItemResponse getInternalItem(
+    public InternalItemDetailResponse getInternalItem(
             @Parameter(description = "조회 대상 부품 SKU", example = "HMC-EN-00214")
             @PathVariable String sku
     ) {
         String normalizedSku = ItemRequestValidator.requireSku(sku, ItemErrorCode.INVALID_SKU_FORMAT);
-        Item item = itemService.getBySku(normalizedSku);
+        ItemView item = itemService.getViewBySku(normalizedSku);
 
-        return InternalItemResponse.from(item);
+        return InternalItemDetailResponse.from(item);
+    }
+
+    @GetMapping("/category/{sku}")
+    @Operation(
+            summary = "내부 부품 분류 조회",
+            description = "inventory-service 등 내부 서비스가 SKU 기준으로 부품의 대분류, 중분류 정보를 조회합니다."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "내부 부품 분류 조회 성공",
+                    content = @Content(schema = @Schema(implementation = InternalItemCategoryResponse.class))),
+            @ApiResponse(responseCode = "400", description = "SKU 형식 오류",
+                    content = @Content(schema = @Schema(implementation = ProblemDetail.class))),
+            @ApiResponse(responseCode = "401", description = "내부 인증 실패",
+                    content = @Content(schema = @Schema(implementation = ProblemDetail.class))),
+            @ApiResponse(responseCode = "403", description = "내부 API 접근 권한 없음",
+                    content = @Content(schema = @Schema(implementation = ProblemDetail.class))),
+            @ApiResponse(responseCode = "404", description = "존재하지 않는 부품",
+                    content = @Content(schema = @Schema(implementation = ProblemDetail.class))),
+            @ApiResponse(responseCode = "500", description = "서버 내부 오류",
+                    content = @Content(schema = @Schema(implementation = ProblemDetail.class)))
+    })
+    public InternalItemCategoryResponse getInternalItemCategory(
+            @Parameter(description = "조회 대상 부품 SKU", example = "HMC-EN-00214")
+            @PathVariable String sku
+    ) {
+        String normalizedSku = ItemRequestValidator.requireSku(sku, ItemErrorCode.INVALID_SKU_FORMAT);
+        ItemView item = itemService.getViewBySku(normalizedSku);
+
+        return InternalItemCategoryResponse.from(item);
     }
 
     @PostMapping("/batch")
