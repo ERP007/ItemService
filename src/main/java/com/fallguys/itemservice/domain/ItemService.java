@@ -375,10 +375,10 @@ public class ItemService {
 
     private void validateCategorySelection(String categoryCode, String subCategoryCode) {
         if (!itemCategoryRepository.existsActiveRootByCode(categoryCode)) {
-            throw new InvalidItemRequestException(ItemErrorCode.INVALID_CATEGORY, "Invalid category: " + categoryCode);
+            throw new InvalidItemRequestException(ItemErrorCode.INVALID_CATEGORY, "대분류가 올바르지 않습니다: " + categoryCode);
         }
         if (!itemCategoryRepository.existsActiveSubCategoryOf(categoryCode, subCategoryCode)) {
-            throw new InvalidItemRequestException(ItemErrorCode.INVALID_SUB_CATEGORY, "Invalid sub category: " + subCategoryCode);
+            throw new InvalidItemRequestException(ItemErrorCode.INVALID_SUB_CATEGORY, "중분류가 올바르지 않습니다: " + subCategoryCode);
         }
     }
 
@@ -389,7 +389,7 @@ public class ItemService {
 
     private static String requireText(String value, String fieldName) {
         if (value == null || value.isBlank()) {
-            throw new InvalidItemException(fieldName + " is required.");
+            throw new InvalidItemException("필수값이 누락되었습니다: " + fieldName);
         }
         return value.trim();
     }

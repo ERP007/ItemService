@@ -22,21 +22,21 @@ public record UpdateItemCommand(
 
     private static String requireText(String value, String fieldName) {
         if (value == null || value.isBlank()) {
-            throw new InvalidItemException(fieldName + " is required.");
+            throw new InvalidItemException("필수값이 누락되었습니다: " + fieldName);
         }
         return value.trim();
     }
 
     private static ItemUnit requireUnit(ItemUnit unit) {
         if (unit == null) {
-            throw new InvalidItemException("unit is required.");
+            throw new InvalidItemException("단위는 필수입니다.");
         }
         return unit;
     }
 
     private static int requireNonNegative(int value, String fieldName) {
         if (value < 0) {
-            throw new InvalidItemException(fieldName + " must be greater than or equal to 0.");
+            throw new InvalidItemException(fieldName + "은(는) 0 이상이어야 합니다.");
         }
         return value;
     }

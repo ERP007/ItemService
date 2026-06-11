@@ -56,7 +56,7 @@ public class ItemCategoryService {
 
     private static String requireText(String value, String fieldName) {
         if (value == null || value.isBlank()) {
-            throw new InvalidItemException(fieldName + " is required.");
+            throw new InvalidItemException("필수값이 누락되었습니다: " + fieldName);
         }
         return value.trim();
     }
