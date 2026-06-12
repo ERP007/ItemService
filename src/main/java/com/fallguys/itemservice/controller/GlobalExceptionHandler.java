@@ -43,7 +43,7 @@ public class GlobalExceptionHandler {
         log.warn("Invalid request: {}", ex.getMessage());
 
         return ResponseEntity.badRequest()
-                .body(build(HttpStatus.BAD_REQUEST, ItemErrorCode.INVALID_PARAMETER.getCode(), "Invalid request."));
+                .body(build(HttpStatus.BAD_REQUEST, ItemErrorCode.INVALID_PARAMETER.getCode(), "잘못된 요청입니다."));
     }
 
     @ExceptionHandler({
@@ -66,7 +66,7 @@ public class GlobalExceptionHandler {
         log.error("Unexpected exception", ex);
 
         return ResponseEntity.internalServerError()
-                .body(build(HttpStatus.INTERNAL_SERVER_ERROR, ItemErrorCode.INTERNAL_ERROR.getCode(), "Internal server error."));
+                .body(build(HttpStatus.INTERNAL_SERVER_ERROR, ItemErrorCode.INTERNAL_ERROR.getCode(), "서버 내부 오류가 발생했습니다."));
     }
 
     private static HttpStatus resolveStatus(BusinessException ex) {

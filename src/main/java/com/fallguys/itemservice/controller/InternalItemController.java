@@ -118,7 +118,7 @@ public class InternalItemController {
             @RequestBody(required = false) InternalItemBatchRequest request
     ) {
         if (request == null) {
-            throw new InvalidItemRequestException(ItemErrorCode.SKUS_REQUIRED, "SKUs are required.");
+            throw new InvalidItemRequestException(ItemErrorCode.SKUS_REQUIRED, "SKU 목록은 필수입니다.");
         }
         List<String> normalizedSkus = request.normalizedSkus();
         List<Item> foundItems = itemService.getBySkus(normalizedSkus);

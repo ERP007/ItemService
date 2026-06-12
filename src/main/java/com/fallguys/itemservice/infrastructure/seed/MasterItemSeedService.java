@@ -74,16 +74,16 @@ public class MasterItemSeedService {
         try (InputStream inputStream = resource.getInputStream()) {
             return csvParser.parse(inputStream, resource.getDescription());
         } catch (IOException ex) {
-            throw new MasterItemSeedException("Failed to read item master seed CSV: " + resource.getDescription(), ex);
+            throw new MasterItemSeedException("부품 마스터 시드 CSV를 읽을 수 없습니다: " + resource.getDescription(), ex);
         }
     }
 
     private static Resource requireResource(Resource resource) {
         if (resource == null) {
-            throw new MasterItemSeedException("Item master seed CSV resource is required.");
+            throw new MasterItemSeedException("부품 마스터 시드 CSV 리소스는 필수입니다.");
         }
         if (!resource.exists()) {
-            throw new MasterItemSeedException("Item master seed CSV resource does not exist: " + resource.getDescription());
+            throw new MasterItemSeedException("부품 마스터 시드 CSV 리소스가 존재하지 않습니다: " + resource.getDescription());
         }
         return resource;
     }

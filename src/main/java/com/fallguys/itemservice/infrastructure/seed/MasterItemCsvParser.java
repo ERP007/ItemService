@@ -45,20 +45,20 @@ class MasterItemCsvParser {
             for (CSVRecord record : csvParser) {
                 MasterItemCsvRow row = parseRecord(record);
                 if (!seenSkus.add(row.sku())) {
-                    throw new MasterItemSeedException("Duplicate SKU in CSV at row " + record.getRecordNumber() + ": " + row.sku());
+                    throw new MasterItemSeedException("CSV에 중복된 SKU가 있습니다. 행=" + record.getRecordNumber() + ", sku=" + row.sku());
                 }
                 rows.add(row);
             }
             return List.copyOf(rows);
         } catch (IOException ex) {
-            throw new MasterItemSeedException("Failed to parse item master seed CSV: " + sourceName, ex);
+            throw new MasterItemSeedException("부품 마스터 시드 CSV를 파싱할 수 없습니다: " + sourceName, ex);
         }
     }
 
     private static void validateHeaders(CSVParser csvParser, String sourceName) {
         List<String> actualHeaders = new ArrayList<>(csvParser.getHeaderMap().keySet());
         if (!EXPECTED_HEADERS.equals(actualHeaders)) {
-            throw new MasterItemSeedException("Invalid item master seed CSV headers in " + sourceName + ": " + actualHeaders);
+            throw new MasterItemSeedException("부품 마스터 시드 CSV 헤더가 올바르지 않습니다: " + sourceName + ", headers=" + actualHeaders);
         }
     }
 
@@ -84,7 +84,7 @@ class MasterItemCsvParser {
     private static String requireText(CSVRecord record, String header) {
         String value = record.get(header);
         if (value == null || value.isBlank()) {
-            throw new MasterItemSeedException("Missing required value at row " + record.getRecordNumber() + ": " + header);
+            throw new MasterItemSeedException("CSV 필수값이 누락되었습니다. 행=" + record.getRecordNumber() + ", 컬럼=" + header);
         }
         return value.trim();
     }
@@ -93,7 +93,7 @@ class MasterItemCsvParser {
         try {
             return ItemUnit.from(unit);
         } catch (RuntimeException ex) {
-            throw new MasterItemSeedException("Invalid unit at row " + recordNumber + ": " + unit, ex);
+            throw new MasterItemSeedException("CSV 단위가 올바르지 않습니다. 행=" + recordNumber + ", unit=" + unit, ex);
         }
     }
 
@@ -101,11 +101,11 @@ class MasterItemCsvParser {
         try {
             int parsed = Integer.parseInt(value);
             if (parsed < 0) {
-                throw new MasterItemSeedException("Negative value at row " + recordNumber + ": " + header);
+                throw new MasterItemSeedException("CSV 숫자 값은 0 이상이어야 합니다. 행=" + recordNumber + ", 컬럼=" + header);
             }
             return parsed;
         } catch (NumberFormatException ex) {
-            throw new MasterItemSeedException("Invalid number at row " + recordNumber + ": " + header + "=" + value, ex);
+            throw new MasterItemSeedException("CSV 숫자 형식이 올바르지 않습니다. 행=" + recordNumber + ", " + header + "=" + value, ex);
         }
     }
 
@@ -116,6 +116,6 @@ class MasterItemCsvParser {
         if ("false".equalsIgnoreCase(value)) {
             return false;
         }
-        throw new MasterItemSeedException("Invalid active value at row " + recordNumber + ": " + value);
+        throw new MasterItemSeedException("CSV active 값이 올바르지 않습니다. 행=" + recordNumber + ", active=" + value);
     }
 }

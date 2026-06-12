@@ -63,14 +63,14 @@ public class ItemCategory {
 
     private static String requireText(String value, String fieldName) {
         if (value == null || value.isBlank()) {
-            throw new InvalidItemCategoryException(fieldName + " is required.");
+            throw new InvalidItemCategoryException("필수값이 누락되었습니다: " + fieldName);
         }
         return value.trim();
     }
 
     private static int requireDepth(int depth) {
         if (depth != ROOT_DEPTH && depth != SUB_CATEGORY_DEPTH) {
-            throw new InvalidItemCategoryException("depth must be 1 or 2.");
+            throw new InvalidItemCategoryException("depth는 1 또는 2여야 합니다.");
         }
         return depth;
     }
@@ -79,10 +79,10 @@ public class ItemCategory {
         String normalizedParentCode = trimToNull(parentCode);
 
         if (depth == ROOT_DEPTH && normalizedParentCode != null) {
-            throw new InvalidItemCategoryException("root category cannot have parentCode.");
+            throw new InvalidItemCategoryException("대분류에는 parentCode를 지정할 수 없습니다.");
         }
         if (depth == SUB_CATEGORY_DEPTH && normalizedParentCode == null) {
-            throw new InvalidItemCategoryException("sub category requires parentCode.");
+            throw new InvalidItemCategoryException("중분류에는 parentCode가 필요합니다.");
         }
         return normalizedParentCode;
     }
@@ -96,7 +96,7 @@ public class ItemCategory {
 
     private static int requireNonNegative(int value, String fieldName) {
         if (value < 0) {
-            throw new InvalidItemCategoryException(fieldName + " must be greater than or equal to 0.");
+            throw new InvalidItemCategoryException(fieldName + "은(는) 0 이상이어야 합니다.");
         }
         return value;
     }

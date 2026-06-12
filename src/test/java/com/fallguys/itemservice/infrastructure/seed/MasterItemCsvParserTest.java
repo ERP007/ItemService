@@ -47,7 +47,7 @@ class MasterItemCsvParserTest {
                 UNKNOWN-001,Unknown item,없는분류,EA,1,1000,true
                 """), "test.csv"));
 
-        assertEquals("Unknown category at row 1: 없는분류", exception.getMessage());
+        assertEquals("CSV 카테고리를 찾을 수 없습니다. 행=1, category=없는분류", exception.getMessage());
     }
 
     @Test
@@ -57,7 +57,7 @@ class MasterItemCsvParserTest {
                 UNKNOWN-001,Unknown item,제동,PACK,1,1000,true
                 """), "test.csv"));
 
-        assertEquals("Invalid unit at row 1: PACK", exception.getMessage());
+        assertEquals("CSV 단위가 올바르지 않습니다. 행=1, unit=PACK", exception.getMessage());
     }
 
     @Test
@@ -67,7 +67,7 @@ class MasterItemCsvParserTest {
                 UNKNOWN-001,Unknown item,제동,EA,-1,1000,true
                 """), "test.csv"));
 
-        assertEquals("Negative value at row 1: safety_stock", exception.getMessage());
+        assertEquals("CSV 숫자 값은 0 이상이어야 합니다. 행=1, 컬럼=safety_stock", exception.getMessage());
     }
 
     @Test
@@ -77,7 +77,7 @@ class MasterItemCsvParserTest {
                 UNKNOWN-001,,제동,EA,1,1000,true
                 """), "test.csv"));
 
-        assertEquals("Missing required value at row 1: name", exception.getMessage());
+        assertEquals("CSV 필수값이 누락되었습니다. 행=1, 컬럼=name", exception.getMessage());
     }
 
     @Test
@@ -88,7 +88,7 @@ class MasterItemCsvParserTest {
                 DUP-001,Second,제동,EA,2,2000,true
                 """), "test.csv"));
 
-        assertEquals("Duplicate SKU in CSV at row 2: DUP-001", exception.getMessage());
+        assertEquals("CSV에 중복된 SKU가 있습니다. 행=2, sku=DUP-001", exception.getMessage());
     }
 
     private static ByteArrayInputStream csv(String value) {
