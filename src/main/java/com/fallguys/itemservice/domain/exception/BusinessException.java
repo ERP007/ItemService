@@ -22,7 +22,7 @@ public abstract class BusinessException extends RuntimeException {
     private static String resolveMessage(ItemErrorCode errorCode, String message) {
         ItemErrorCode resolvedErrorCode = Objects.requireNonNull(errorCode, "errorCode");
         if (message == null || message.isBlank()) {
-            return resolvedErrorCode.getMessage();
+            return resolvedErrorCode.getDefaultMessage();
         }
         return message;
     }

@@ -128,7 +128,7 @@ class ItemTest {
         );
 
         assertAll(
-                () -> assertEquals("INVALID_ITEM_STATUS", exception.getCode()),
+                () -> assertEquals("ITM-017", exception.getCode()),
                 () -> assertTrue(item.isActive()),
                 () -> assertEquals(CREATED_AT, item.getUpdatedAt())
         );
@@ -154,7 +154,7 @@ class ItemTest {
         );
 
         assertAll(
-                () -> assertEquals("INVALID_ITEM_STATUS", exception.getCode()),
+                () -> assertEquals("ITM-017", exception.getCode()),
                 () -> assertFalse(item.isActive()),
                 () -> assertEquals(CREATED_AT, item.getUpdatedAt())
         );

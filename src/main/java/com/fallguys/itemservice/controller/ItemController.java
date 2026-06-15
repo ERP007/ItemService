@@ -312,20 +312,20 @@ public class ItemController {
             case "ALL" -> null;
             case "ACTIVE" -> true;
             case "INACTIVE" -> false;
-            default -> throw new InvalidItemRequestException(ItemErrorCode.INVALID_PARAMETER, "상태 값이 올바르지 않습니다: " + status);
+            default -> throw new InvalidItemRequestException(ItemErrorCode.INVALID_REQUEST, "상태 값이 올바르지 않습니다: " + status);
         };
     }
 
     private static int toZeroBasedPage(int page) {
         if (page < 1) {
-            throw new InvalidItemRequestException(ItemErrorCode.INVALID_PARAMETER, "page는 1 이상이어야 합니다.");
+            throw new InvalidItemRequestException(ItemErrorCode.INVALID_REQUEST, "page는 1 이상이어야 합니다.");
         }
         return page - 1;
     }
 
     private static int requireSize(int size) {
         if (size < 1) {
-            throw new InvalidItemRequestException(ItemErrorCode.INVALID_PARAMETER, "size는 1 이상이어야 합니다.");
+            throw new InvalidItemRequestException(ItemErrorCode.INVALID_REQUEST, "size는 1 이상이어야 합니다.");
         }
         return size;
     }
@@ -338,7 +338,7 @@ public class ItemController {
             case "createdAt" -> ItemSortBy.CREATED_AT;
             case "updatedAt" -> ItemSortBy.UPDATED_AT;
             case "safetyStock" -> ItemSortBy.SAFETY_STOCK;
-            default -> throw new InvalidItemRequestException(ItemErrorCode.INVALID_PARAMETER, "정렬 필드가 올바르지 않습니다: " + parts[0]);
+            default -> throw new InvalidItemRequestException(ItemErrorCode.INVALID_REQUEST, "정렬 필드가 올바르지 않습니다: " + parts[0]);
         };
     }
 
@@ -347,7 +347,7 @@ public class ItemController {
         return switch (parts[1].toLowerCase()) {
             case "asc" -> SortDirection.ASC;
             case "desc" -> SortDirection.DESC;
-            default -> throw new InvalidItemRequestException(ItemErrorCode.INVALID_PARAMETER, "정렬 방향이 올바르지 않습니다: " + parts[1]);
+            default -> throw new InvalidItemRequestException(ItemErrorCode.INVALID_REQUEST, "정렬 방향이 올바르지 않습니다: " + parts[1]);
         };
     }
 
@@ -358,7 +358,7 @@ public class ItemController {
         }
         String[] parts = normalizedSort.split(",");
         if (parts.length != 2 || parts[0].isBlank() || parts[1].isBlank()) {
-            throw new InvalidItemRequestException(ItemErrorCode.INVALID_PARAMETER, "정렬 조건이 올바르지 않습니다: " + sort);
+            throw new InvalidItemRequestException(ItemErrorCode.INVALID_REQUEST, "정렬 조건이 올바르지 않습니다: " + sort);
         }
         return new String[]{parts[0].trim(), parts[1].trim()};
     }

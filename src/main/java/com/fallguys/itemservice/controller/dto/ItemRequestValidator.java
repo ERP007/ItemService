@@ -63,15 +63,15 @@ public final class ItemRequestValidator {
         if (normalizedCategoryCode == null) {
             throw new InvalidItemRequestException(ItemErrorCode.CATEGORY_REQUIRED, "카테고리는 필수입니다.");
         }
-        return requireCategoryFormat(normalizedCategoryCode, ItemErrorCode.CATEGORY_REQUIRED);
+        return requireCategoryFormat(normalizedCategoryCode, ItemErrorCode.INVALID_CATEGORY_CODE);
     }
 
     public static String requireCategoryForUpdate(String categoryCode) {
-        return requireCategoryFormat(categoryCode, ItemErrorCode.INVALID_CATEGORY);
+        return requireCategoryFormat(categoryCode, ItemErrorCode.INVALID_CATEGORY_CODE);
     }
 
     public static String requireSubCategoryForUpdate(String subCategoryCode) {
-        return requireCategoryFormat(subCategoryCode, ItemErrorCode.INVALID_SUB_CATEGORY);
+        return requireCategoryFormat(subCategoryCode, ItemErrorCode.INVALID_CATEGORY_CODE);
     }
 
     public static String requireCategoryForFilter(String categoryCode) {

@@ -1,6 +1,5 @@
 package com.fallguys.itemservice.controller.security;
 
-import com.fallguys.itemservice.domain.exception.ItemErrorCode;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -20,6 +19,9 @@ import java.time.Instant;
 @Component
 public class SecurityProblemHandler implements AuthenticationEntryPoint, AccessDeniedHandler {
 
+    private static final String UNAUTHORIZED_DETAIL = "인증이 필요합니다.";
+    private static final String FORBIDDEN_DETAIL = "접근 권한이 없습니다.";
+
     private final ObjectMapper objectMapper;
 
     public SecurityProblemHandler(ObjectMapper objectMapper) {
@@ -32,7 +34,7 @@ public class SecurityProblemHandler implements AuthenticationEntryPoint, AccessD
             HttpServletResponse response,
             AuthenticationException authException
     ) throws IOException {
-        write(response, HttpStatus.UNAUTHORIZED, ItemErrorCode.UNAUTHORIZED);
+        write(response, HttpStatus.UNAUTHORIZED, UNAUTHORIZED_DETAIL);
     }
 
     @Override
@@ -41,12 +43,11 @@ public class SecurityProblemHandler implements AuthenticationEntryPoint, AccessD
             HttpServletResponse response,
             AccessDeniedException accessDeniedException
     ) throws IOException, ServletException {
-        write(response, HttpStatus.FORBIDDEN, ItemErrorCode.FORBIDDEN);
+        write(response, HttpStatus.FORBIDDEN, FORBIDDEN_DETAIL);
     }
 
-    private void write(HttpServletResponse response, HttpStatus status, ItemErrorCode errorCode) throws IOException {
-        ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(status, errorCode.getMessage());
-        problemDetail.setProperty("errorCode", errorCode.getCode());
+    private void write(HttpServletResponse response, HttpStatus status, String detail) throws IOException {
+        ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(status, detail);
         problemDetail.setProperty("timestamp", Instant.now().toString());
 
         response.setStatus(status.value());
