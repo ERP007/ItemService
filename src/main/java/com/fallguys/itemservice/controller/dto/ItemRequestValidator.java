@@ -19,17 +19,17 @@ public final class ItemRequestValidator {
     public static String requireSku(String sku, ItemErrorCode missingCode) {
         String normalizedSku = trimToNull(sku);
         if (normalizedSku == null) {
-            throw new InvalidItemRequestException(missingCode, "SKU is required.");
+            throw new InvalidItemRequestException(missingCode, "SKU는 필수입니다.");
         }
         if (!SKU_PATTERN.matcher(normalizedSku).matches()) {
-            throw new InvalidItemRequestException(ItemErrorCode.INVALID_SKU_FORMAT, "Invalid SKU format: " + normalizedSku);
+            throw new InvalidItemRequestException(ItemErrorCode.INVALID_SKU_FORMAT, "SKU 형식이 올바르지 않습니다: " + normalizedSku);
         }
         return normalizedSku;
     }
 
     public static List<String> requireSkus(List<String> skus, int maxSize) {
         if (skus == null || skus.isEmpty()) {
-            throw new InvalidItemRequestException(ItemErrorCode.SKUS_REQUIRED, "SKUs are required.");
+            throw new InvalidItemRequestException(ItemErrorCode.SKUS_REQUIRED, "SKU 목록은 필수입니다.");
         }
 
         LinkedHashSet<String> normalizedSkus = new LinkedHashSet<>();
@@ -37,7 +37,7 @@ public final class ItemRequestValidator {
             normalizedSkus.add(requireSku(sku, ItemErrorCode.INVALID_SKU_FORMAT));
         }
         if (normalizedSkus.size() > maxSize) {
-            throw new InvalidItemRequestException(ItemErrorCode.TOO_MANY_SKUS, "Too many SKUs. max=" + maxSize);
+            throw new InvalidItemRequestException(ItemErrorCode.TOO_MANY_SKUS, "조회할 SKU는 최대 " + maxSize + "개까지 가능합니다.");
         }
         return List.copyOf(normalizedSkus);
     }
@@ -45,7 +45,7 @@ public final class ItemRequestValidator {
     public static String requireNameForCreate(String name) {
         String normalizedName = trimToNull(name);
         if (normalizedName == null) {
-            throw new InvalidItemRequestException(ItemErrorCode.ITEM_NAME_REQUIRED, "Item name is required.");
+            throw new InvalidItemRequestException(ItemErrorCode.ITEM_NAME_REQUIRED, "부품명은 필수입니다.");
         }
         return normalizedName;
     }
@@ -53,7 +53,7 @@ public final class ItemRequestValidator {
     public static String requireNameForUpdate(String name) {
         String normalizedName = trimToNull(name);
         if (normalizedName == null) {
-            throw new InvalidItemRequestException(ItemErrorCode.INVALID_ITEM_NAME, "Invalid item name.");
+            throw new InvalidItemRequestException(ItemErrorCode.INVALID_ITEM_NAME, "부품명이 올바르지 않습니다.");
         }
         return normalizedName;
     }
@@ -61,17 +61,17 @@ public final class ItemRequestValidator {
     public static String requireCategoryForCreate(String categoryCode) {
         String normalizedCategoryCode = trimToNull(categoryCode);
         if (normalizedCategoryCode == null) {
-            throw new InvalidItemRequestException(ItemErrorCode.CATEGORY_REQUIRED, "Category is required.");
+            throw new InvalidItemRequestException(ItemErrorCode.CATEGORY_REQUIRED, "카테고리는 필수입니다.");
         }
-        return requireCategoryFormat(normalizedCategoryCode, ItemErrorCode.CATEGORY_REQUIRED);
+        return requireCategoryFormat(normalizedCategoryCode, ItemErrorCode.INVALID_CATEGORY_CODE);
     }
 
     public static String requireCategoryForUpdate(String categoryCode) {
-        return requireCategoryFormat(categoryCode, ItemErrorCode.INVALID_CATEGORY);
+        return requireCategoryFormat(categoryCode, ItemErrorCode.INVALID_CATEGORY_CODE);
     }
 
     public static String requireSubCategoryForUpdate(String subCategoryCode) {
-        return requireCategoryFormat(subCategoryCode, ItemErrorCode.INVALID_SUB_CATEGORY);
+        return requireCategoryFormat(subCategoryCode, ItemErrorCode.INVALID_CATEGORY_CODE);
     }
 
     public static String requireCategoryForFilter(String categoryCode) {
@@ -82,20 +82,20 @@ public final class ItemRequestValidator {
         try {
             return ItemUnit.from(unit);
         } catch (RuntimeException ex) {
-            throw new InvalidItemRequestException(ItemErrorCode.INVALID_UNIT, "Invalid unit: " + unit);
+            throw new InvalidItemRequestException(ItemErrorCode.INVALID_UNIT, "단위가 올바르지 않습니다: " + unit);
         }
     }
 
     public static int requireSafetyStock(Integer safetyStock) {
         if (safetyStock == null || safetyStock < 0) {
-            throw new InvalidItemRequestException(ItemErrorCode.INVALID_SAFETY_STOCK, "Invalid safety stock.");
+            throw new InvalidItemRequestException(ItemErrorCode.INVALID_SAFETY_STOCK, "안전재고는 0 이상이어야 합니다.");
         }
         return safetyStock;
     }
 
     public static int requireUnitPrice(Integer unitPrice) {
         if (unitPrice == null || unitPrice < 0) {
-            throw new InvalidItemRequestException(ItemErrorCode.INVALID_UNIT_PRICE, "Invalid unit price.");
+            throw new InvalidItemRequestException(ItemErrorCode.INVALID_UNIT_PRICE, "기준 단가는 0 이상이어야 합니다.");
         }
         return unitPrice;
     }
@@ -110,7 +110,7 @@ public final class ItemRequestValidator {
     private static String requireCategoryFormat(String categoryCode, ItemErrorCode errorCode) {
         String normalizedCategoryCode = trimToNull(categoryCode);
         if (normalizedCategoryCode == null || !CATEGORY_CODE_PATTERN.matcher(normalizedCategoryCode).matches()) {
-            throw new InvalidItemRequestException(errorCode, "Invalid category code: " + categoryCode);
+            throw new InvalidItemRequestException(errorCode, "카테고리 코드 형식이 올바르지 않습니다: " + categoryCode);
         }
         return normalizedCategoryCode;
     }

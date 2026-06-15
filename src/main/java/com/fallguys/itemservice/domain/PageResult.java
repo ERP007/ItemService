@@ -15,13 +15,13 @@ public record PageResult<T>(
     public PageResult {
         content = List.copyOf(Objects.requireNonNull(content, "content"));
         if (page < 0) {
-            throw new InvalidItemException("page must be greater than or equal to 0.");
+            throw new InvalidItemException("page는 0 이상이어야 합니다.");
         }
         if (size <= 0) {
-            throw new InvalidItemException("size must be greater than 0.");
+            throw new InvalidItemException("size는 1 이상이어야 합니다.");
         }
         if (totalElements < 0) {
-            throw new InvalidItemException("totalElements must be greater than or equal to 0.");
+            throw new InvalidItemException("totalElements는 0 이상이어야 합니다.");
         }
     }
 

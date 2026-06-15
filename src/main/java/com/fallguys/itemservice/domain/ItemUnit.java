@@ -20,7 +20,7 @@ public enum ItemUnit {
 
     public static ItemUnit from(String value) {
         if (value == null || value.isBlank()) {
-            throw new InvalidItemUnitException("unit is required.");
+            throw new InvalidItemUnitException("단위는 필수입니다.");
         }
 
         String normalizedValue = value.trim().toUpperCase(Locale.ROOT);
@@ -29,7 +29,7 @@ public enum ItemUnit {
                 return unit;
             }
         }
-        throw new InvalidItemUnitException("Unsupported item unit: " + value.trim());
+        throw new InvalidItemUnitException("지원하지 않는 단위입니다: " + value.trim());
     }
 
     public String getCode() {

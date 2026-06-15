@@ -153,19 +153,24 @@ class ItemControllerTest {
         for (String role : List.of("BRANCH_MANAGER", "BRANCH_STAFF")) {
             mockMvc.perform(createItemRequest().with(roleJwt(role)))
                     .andExpect(status().isForbidden())
-                    .andExpect(jsonPath("$.errorCode").value("FORBIDDEN"));
+                    .andExpect(jsonPath("$.detail").value("접근 권한이 없습니다."))
+                    .andExpect(jsonPath("$.errorCode").doesNotExist());
             mockMvc.perform(updateItemRequest().with(roleJwt(role)))
                     .andExpect(status().isForbidden())
-                    .andExpect(jsonPath("$.errorCode").value("FORBIDDEN"));
+                    .andExpect(jsonPath("$.detail").value("접근 권한이 없습니다."))
+                    .andExpect(jsonPath("$.errorCode").doesNotExist());
             mockMvc.perform(activateItemRequest().with(roleJwt(role)))
                     .andExpect(status().isForbidden())
-                    .andExpect(jsonPath("$.errorCode").value("FORBIDDEN"));
+                    .andExpect(jsonPath("$.detail").value("접근 권한이 없습니다."))
+                    .andExpect(jsonPath("$.errorCode").doesNotExist());
             mockMvc.perform(deactivateItemRequest().with(roleJwt(role)))
                     .andExpect(status().isForbidden())
-                    .andExpect(jsonPath("$.errorCode").value("FORBIDDEN"));
+                    .andExpect(jsonPath("$.detail").value("접근 권한이 없습니다."))
+                    .andExpect(jsonPath("$.errorCode").doesNotExist());
             mockMvc.perform(codeCheckRequest().with(roleJwt(role)))
                     .andExpect(status().isForbidden())
-                    .andExpect(jsonPath("$.errorCode").value("FORBIDDEN"));
+                    .andExpect(jsonPath("$.detail").value("접근 권한이 없습니다."))
+                    .andExpect(jsonPath("$.errorCode").doesNotExist());
         }
     }
 
@@ -173,19 +178,24 @@ class ItemControllerTest {
     void rejectsUnauthenticatedWriteApis() throws Exception {
         mockMvc.perform(createItemRequest())
                 .andExpect(status().isUnauthorized())
-                .andExpect(jsonPath("$.errorCode").value("UNAUTHORIZED"));
+                .andExpect(jsonPath("$.detail").value("인증이 필요합니다."))
+                .andExpect(jsonPath("$.errorCode").doesNotExist());
         mockMvc.perform(updateItemRequest())
                 .andExpect(status().isUnauthorized())
-                .andExpect(jsonPath("$.errorCode").value("UNAUTHORIZED"));
+                .andExpect(jsonPath("$.detail").value("인증이 필요합니다."))
+                .andExpect(jsonPath("$.errorCode").doesNotExist());
         mockMvc.perform(activateItemRequest())
                 .andExpect(status().isUnauthorized())
-                .andExpect(jsonPath("$.errorCode").value("UNAUTHORIZED"));
+                .andExpect(jsonPath("$.detail").value("인증이 필요합니다."))
+                .andExpect(jsonPath("$.errorCode").doesNotExist());
         mockMvc.perform(deactivateItemRequest())
                 .andExpect(status().isUnauthorized())
-                .andExpect(jsonPath("$.errorCode").value("UNAUTHORIZED"));
+                .andExpect(jsonPath("$.detail").value("인증이 필요합니다."))
+                .andExpect(jsonPath("$.errorCode").doesNotExist());
         mockMvc.perform(codeCheckRequest())
                 .andExpect(status().isUnauthorized())
-                .andExpect(jsonPath("$.errorCode").value("UNAUTHORIZED"));
+                .andExpect(jsonPath("$.detail").value("인증이 필요합니다."))
+                .andExpect(jsonPath("$.errorCode").doesNotExist());
     }
 
     @Test
@@ -215,10 +225,12 @@ class ItemControllerTest {
     void rejectsUserApisWhenJwtRoleClaimIsMissingOrUnknown() throws Exception {
         mockMvc.perform(get("/items").with(jwtWithoutRole()))
                 .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.errorCode").value("FORBIDDEN"));
+                .andExpect(jsonPath("$.detail").value("접근 권한이 없습니다."))
+                .andExpect(jsonPath("$.errorCode").doesNotExist());
         mockMvc.perform(get("/items").with(roleJwt("UNKNOWN")))
                 .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.errorCode").value("FORBIDDEN"));
+                .andExpect(jsonPath("$.detail").value("접근 권한이 없습니다."))
+                .andExpect(jsonPath("$.errorCode").doesNotExist());
     }
 
     @Test
@@ -283,12 +295,12 @@ class ItemControllerTest {
     void failsWhenSearchParameterIsInvalid() throws Exception {
         mockMvc.perform(get("/items").param("status", "UNKNOWN").with(adminJwt()))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.errorCode").value("INVALID_PARAMETER"))
+                .andExpect(jsonPath("$.errorCode").value("ITM-001"))
                 .andExpect(jsonPath("$.timestamp").exists());
 
         mockMvc.perform(get("/items").param("categoryCode", "engine").with(adminJwt()))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.errorCode").value("INVALID_CATEGORY_CODE"));
+                .andExpect(jsonPath("$.errorCode").value("ITM-002"));
     }
 
     @Test
@@ -317,14 +329,14 @@ class ItemControllerTest {
     void failsWhenDetailSkuIsInvalidOrMissing() throws Exception {
         mockMvc.perform(get("/items/{sku}", "hmc.wp").with(adminJwt()))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.errorCode").value("INVALID_SKU_FORMAT"));
+                .andExpect(jsonPath("$.errorCode").value("ITM-006"));
 
         when(itemService.getViewBySku(eq("UNKNOWN")))
                 .thenThrow(new ItemNotFoundException("UNKNOWN"));
 
         mockMvc.perform(get("/items/{sku}", "UNKNOWN").with(adminJwt()))
                 .andExpect(status().isNotFound())
-                .andExpect(jsonPath("$.errorCode").value("ITEM_NOT_FOUND"));
+                .andExpect(jsonPath("$.errorCode").value("ITM-019"));
     }
 
     @Test
@@ -392,28 +404,28 @@ class ItemControllerTest {
     void failsWhenInternalSkuIsInvalidOrMissing() throws Exception {
         mockMvc.perform(get("/internal/items/{sku}", "hmc.wp"))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.errorCode").value("INVALID_SKU_FORMAT"));
+                .andExpect(jsonPath("$.errorCode").value("ITM-006"));
 
         when(itemService.getViewBySku(eq("UNKNOWN")))
                 .thenThrow(new ItemNotFoundException("UNKNOWN"));
 
         mockMvc.perform(get("/internal/items/{sku}", "UNKNOWN"))
                 .andExpect(status().isNotFound())
-                .andExpect(jsonPath("$.errorCode").value("ITEM_NOT_FOUND"));
+                .andExpect(jsonPath("$.errorCode").value("ITM-019"));
     }
 
     @Test
     void failsWhenInternalCategorySkuIsInvalidOrMissing() throws Exception {
         mockMvc.perform(get("/internal/items/category/{sku}", "hmc.wp"))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.errorCode").value("INVALID_SKU_FORMAT"));
+                .andExpect(jsonPath("$.errorCode").value("ITM-006"));
 
         when(itemService.getViewBySku(eq("UNKNOWN")))
                 .thenThrow(new ItemNotFoundException("UNKNOWN"));
 
         mockMvc.perform(get("/internal/items/category/{sku}", "UNKNOWN"))
                 .andExpect(status().isNotFound())
-                .andExpect(jsonPath("$.errorCode").value("ITEM_NOT_FOUND"));
+                .andExpect(jsonPath("$.errorCode").value("ITM-019"));
     }
 
     @Test
@@ -471,13 +483,13 @@ class ItemControllerTest {
     void failsWhenInternalBatchSkusAreMissingOrInvalid() throws Exception {
         mockMvc.perform(post("/internal/items/batch"))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.errorCode").value("SKUS_REQUIRED"));
+                .andExpect(jsonPath("$.errorCode").value("ITM-005"));
 
         mockMvc.perform(post("/internal/items/batch")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{}"))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.errorCode").value("SKUS_REQUIRED"));
+                .andExpect(jsonPath("$.errorCode").value("ITM-005"));
 
         mockMvc.perform(post("/internal/items/batch")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -487,7 +499,7 @@ class ItemControllerTest {
                                 }
                                 """))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.errorCode").value("SKUS_REQUIRED"));
+                .andExpect(jsonPath("$.errorCode").value("ITM-005"));
 
         mockMvc.perform(post("/internal/items/batch")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -497,7 +509,7 @@ class ItemControllerTest {
                                 }
                                 """))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.errorCode").value("INVALID_SKU_FORMAT"));
+                .andExpect(jsonPath("$.errorCode").value("ITM-006"));
     }
 
     @Test
@@ -510,7 +522,7 @@ class ItemControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(content))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.errorCode").value("TOO_MANY_SKUS"));
+                .andExpect(jsonPath("$.errorCode").value("ITM-007"));
     }
 
     @Test
@@ -552,7 +564,7 @@ class ItemControllerTest {
                                 """)
                         .with(adminJwt()))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.errorCode").value("SKU_REQUIRED"));
+                .andExpect(jsonPath("$.errorCode").value("ITM-004"));
 
         when(itemService.createView(any(CreateItemCommand.class)))
                 .thenThrow(new DuplicateItemSkuException("HMC-EN-00214"));
@@ -571,7 +583,7 @@ class ItemControllerTest {
                                 """)
                         .with(adminJwt()))
                 .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.errorCode").value("DUPLICATE_SKU"));
+                .andExpect(jsonPath("$.errorCode").value("ITM-013"));
     }
 
     @Test
@@ -615,7 +627,7 @@ class ItemControllerTest {
                                 """)
                         .with(adminJwt()))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.errorCode").value("INACTIVE_ITEM_CANNOT_BE_MODIFIED"));
+                .andExpect(jsonPath("$.errorCode").value("ITM-018"));
     }
 
     @Test
@@ -649,7 +661,7 @@ class ItemControllerTest {
     void failsWhenStatusChangeSkuIsInvalid() throws Exception {
         mockMvc.perform(patch("/items/{sku}/activate", "hmc.wp").with(adminJwt()))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.errorCode").value("INVALID_SKU_FORMAT"));
+                .andExpect(jsonPath("$.errorCode").value("ITM-006"));
     }
 
     @Test
@@ -659,7 +671,7 @@ class ItemControllerTest {
 
         mockMvc.perform(patch("/items/{sku}/activate", "HMC-WP-00229").with(adminJwt()))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.errorCode").value("INVALID_ITEM_STATUS"));
+                .andExpect(jsonPath("$.errorCode").value("ITM-017"));
     }
 
     @Test
@@ -669,7 +681,7 @@ class ItemControllerTest {
 
         mockMvc.perform(patch("/items/{sku}/deactivate", "HMC-WP-00229").with(adminJwt()))
                 .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.errorCode").value("CONCURRENT_MODIFICATION"));
+                .andExpect(jsonPath("$.errorCode").value("ITM-020"));
     }
 
     @Test
@@ -735,7 +747,7 @@ class ItemControllerTest {
 
         mockMvc.perform(get("/items/categories/{categoryCode}/sub-categories", "UNKNOWN").with(adminJwt()))
                 .andExpect(status().isNotFound())
-                .andExpect(jsonPath("$.errorCode").value("CATEGORY_NOT_FOUND"));
+                .andExpect(jsonPath("$.errorCode").value("ITM-003"));
     }
 
     @Test

@@ -57,7 +57,7 @@ final class MasterItemCategoryMapping {
     static MasterItemCategoryDefinition requireFinalCategory(String displayPath, long recordNumber) {
         MasterItemCategoryDefinition category = FINAL_CATEGORY_BY_DISPLAY_PATH.get(displayPath);
         if (category == null) {
-            throw new MasterItemSeedException("Unknown category at row " + recordNumber + ": " + displayPath);
+            throw new MasterItemSeedException("CSV 카테고리를 찾을 수 없습니다. 행=" + recordNumber + ", category=" + displayPath);
         }
         return category;
     }

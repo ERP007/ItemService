@@ -86,18 +86,20 @@ class ItemServiceTest {
 
     @Test
     void failsWhenCategoryIsUnavailableForCreate() {
+        UnavailableItemCategoryException exception = assertThrows(
+                UnavailableItemCategoryException.class,
+                () -> itemService.create(new CreateItemCommand(
+                        "ENG-OIL-5W30-1L",
+                        "Engine oil",
+                        "ENGINE_OIL",
+                        ItemUnit.EA,
+                        50,
+                        8500
+                ))
+        );
+
         assertAll(
-                () -> assertThrows(
-                        UnavailableItemCategoryException.class,
-                        () -> itemService.create(new CreateItemCommand(
-                                "ENG-OIL-5W30-1L",
-                                "Engine oil",
-                                "ENGINE_OIL",
-                                ItemUnit.EA,
-                                50,
-                                8500
-                        ))
-                ),
+                () -> assertEquals("ITM-003", exception.getCode()),
                 () -> assertFalse(itemRepository.existsBySku("ENG-OIL-5W30-1L"))
         );
     }
@@ -191,7 +193,7 @@ class ItemServiceTest {
     void failsWhenCategoryIsUnavailableForUpdate() {
         itemRepository.save(existingItem("ENG-OIL-5W30-1L", "ENGINE_OIL", true));
 
-        assertThrows(
+        UnavailableItemCategoryException exception = assertThrows(
                 UnavailableItemCategoryException.class,
                 () -> itemService.update(new UpdateItemCommand(
                         "ENG-OIL-5W30-1L",
@@ -202,6 +204,8 @@ class ItemServiceTest {
                         8500
                 ))
         );
+
+        assertEquals("ITM-003", exception.getCode());
     }
 
     @Test
