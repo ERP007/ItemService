@@ -2,6 +2,7 @@ package com.fallguys.itemservice.domain;
 
 import com.fallguys.itemservice.domain.exception.DuplicateItemSkuException;
 import com.fallguys.itemservice.domain.exception.InactiveItemCannotBeModifiedException;
+import com.fallguys.itemservice.domain.exception.InventorySyncUnavailableException;
 import com.fallguys.itemservice.domain.exception.InvalidItemStatusException;
 import com.fallguys.itemservice.domain.exception.ItemNotFoundException;
 import com.fallguys.itemservice.domain.exception.UnavailableItemCategoryException;
@@ -31,13 +32,15 @@ class ItemServiceTest {
 
     private FakeItemRepository itemRepository;
     private FakeItemCategoryRepository itemCategoryRepository;
+    private FakeInventoryItemSynchronizer inventoryItemSynchronizer;
     private ItemService itemService;
 
     @BeforeEach
     void setUp() {
         itemRepository = new FakeItemRepository();
         itemCategoryRepository = new FakeItemCategoryRepository();
-        itemService = new ItemService(itemRepository, itemCategoryRepository, CLOCK);
+        inventoryItemSynchronizer = new FakeInventoryItemSynchronizer();
+        itemService = new ItemService(itemRepository, itemCategoryRepository, inventoryItemSynchronizer, CLOCK);
     }
 
     @Test
@@ -185,8 +188,59 @@ class ItemServiceTest {
                 () -> assertEquals(ItemUnit.SET, updated.getUnit()),
                 () -> assertEquals(10, updated.getSafetyStock()),
                 () -> assertEquals(12000, updated.getUnitPrice()),
-                () -> assertEquals(NOW, updated.getUpdatedAt())
+                () -> assertEquals(NOW, updated.getUpdatedAt()),
+                () -> assertEquals(
+                        List.of(
+                                "name:ENG-OIL-5W30-1L:Oil filter",
+                                "unit:ENG-OIL-5W30-1L:SET"
+                        ),
+                        inventoryItemSynchronizer.calls
+                )
         );
+    }
+
+    @Test
+    void syncsInventoryOnlyWhenSelectionUpdateChangesReplicatedFields() {
+        itemRepository.save(existingItem("ENG-OIL-5W30-1L", "ENGINE_OIL", true));
+        itemCategoryRepository.addRootCategory("ENGINE");
+        itemCategoryRepository.addSubCategory("ENGINE_FILTER", "ENGINE");
+
+        itemService.updateSelection(new UpdateItemSelectionCommand(
+                "ENG-OIL-5W30-1L",
+                "Oil filter",
+                "ENGINE",
+                "ENGINE_FILTER",
+                ItemUnit.SET,
+                10,
+                12000
+        ));
+
+        assertEquals(
+                List.of(
+                        "name:ENG-OIL-5W30-1L:Oil filter",
+                        "unit:ENG-OIL-5W30-1L:SET"
+                ),
+                inventoryItemSynchronizer.calls
+        );
+    }
+
+    @Test
+    void skipsInventorySyncWhenSelectionUpdateDoesNotChangeReplicatedFields() {
+        itemRepository.save(existingItem("ENG-OIL-5W30-1L", "ENGINE_OIL", true));
+        itemCategoryRepository.addRootCategory("ENGINE");
+        itemCategoryRepository.addSubCategory("ENGINE_OIL", "ENGINE");
+
+        itemService.updateSelection(new UpdateItemSelectionCommand(
+                "ENG-OIL-5W30-1L",
+                " Engine oil ",
+                "ENGINE",
+                "ENGINE_OIL",
+                ItemUnit.EA,
+                70,
+                9000
+        ));
+
+        assertTrue(inventoryItemSynchronizer.calls.isEmpty());
     }
 
     @Test
@@ -215,14 +269,81 @@ class ItemServiceTest {
         Item activated = itemService.activate("ENG-OIL-5W30-1L");
         assertAll(
                 () -> assertTrue(activated.isActive()),
-                () -> assertEquals(NOW, activated.getUpdatedAt())
+                () -> assertEquals(NOW, activated.getUpdatedAt()),
+                () -> assertEquals(List.of("active:ENG-OIL-5W30-1L:true"), inventoryItemSynchronizer.calls)
         );
 
+        inventoryItemSynchronizer.clear();
         Item deactivated = itemService.deactivate("ENG-OIL-5W30-1L");
 
         assertAll(
                 () -> assertFalse(deactivated.isActive()),
-                () -> assertEquals(NOW, deactivated.getUpdatedAt())
+                () -> assertEquals(NOW, deactivated.getUpdatedAt()),
+                () -> assertEquals(List.of("active:ENG-OIL-5W30-1L:false"), inventoryItemSynchronizer.calls)
+        );
+    }
+
+    @Test
+    void propagatesInventorySyncFailureAfterLocalUpdateAttempt() {
+        itemRepository.save(existingItem("ENG-OIL-5W30-1L", "ENGINE_OIL", true));
+        itemCategoryRepository.addRootCategory("ENGINE");
+        itemCategoryRepository.addSubCategory("ENGINE_FILTER", "ENGINE");
+        InventorySyncUnavailableException syncFailure = new InventorySyncUnavailableException(
+                "재고 서비스에 연결할 수 없습니다: itemName",
+                new RuntimeException("timeout")
+        );
+        inventoryItemSynchronizer.failWith(syncFailure);
+
+        InventorySyncUnavailableException exception = assertThrows(
+                InventorySyncUnavailableException.class,
+                () -> itemService.updateSelection(new UpdateItemSelectionCommand(
+                        "ENG-OIL-5W30-1L",
+                        "Oil filter",
+                        "ENGINE",
+                        "ENGINE_FILTER",
+                        ItemUnit.SET,
+                        10,
+                        12000
+                ))
+        );
+
+        assertSame(syncFailure, exception);
+    }
+
+    @Test
+    void compensatesNameSyncWhenUnitSyncFailsAfterNameSyncSucceeded() {
+        itemRepository.save(existingItem("ENG-OIL-5W30-1L", "ENGINE_OIL", true));
+        itemCategoryRepository.addRootCategory("ENGINE");
+        itemCategoryRepository.addSubCategory("ENGINE_FILTER", "ENGINE");
+        InventorySyncUnavailableException syncFailure = new InventorySyncUnavailableException(
+                "재고 서비스에 연결할 수 없습니다: itemUnit",
+                new RuntimeException("timeout")
+        );
+        inventoryItemSynchronizer.failOnCall("unit:ENG-OIL-5W30-1L:SET", syncFailure);
+
+        InventorySyncUnavailableException exception = assertThrows(
+                InventorySyncUnavailableException.class,
+                () -> itemService.updateSelection(new UpdateItemSelectionCommand(
+                        "ENG-OIL-5W30-1L",
+                        "Oil filter",
+                        "ENGINE",
+                        "ENGINE_FILTER",
+                        ItemUnit.SET,
+                        10,
+                        12000
+                ))
+        );
+
+        assertAll(
+                () -> assertSame(syncFailure, exception),
+                () -> assertEquals(
+                        List.of(
+                                "name:ENG-OIL-5W30-1L:Oil filter",
+                                "unit:ENG-OIL-5W30-1L:SET",
+                                "name:ENG-OIL-5W30-1L:Engine oil"
+                        ),
+                        inventoryItemSynchronizer.calls
+                )
         );
     }
 
@@ -463,6 +584,55 @@ class ItemServiceTest {
         public ItemCategory save(ItemCategory category) {
             categories.put(category.getCode(), category);
             return category;
+        }
+    }
+
+    private static class FakeInventoryItemSynchronizer implements InventoryItemSynchronizer {
+
+        private final List<String> calls = new ArrayList<>();
+        private RuntimeException failure;
+        private String failureCall;
+
+        void failWith(RuntimeException failure) {
+            this.failure = failure;
+        }
+
+        void failOnCall(String call, RuntimeException failure) {
+            this.failureCall = call;
+            this.failure = failure;
+        }
+
+        void clear() {
+            calls.clear();
+            failure = null;
+            failureCall = null;
+        }
+
+        @Override
+        public void syncName(String sku, String itemName) {
+            calls.add("name:" + sku + ":" + itemName);
+            failIfConfigured();
+        }
+
+        @Override
+        public void syncUnit(String sku, ItemUnit itemUnit) {
+            calls.add("unit:" + sku + ":" + itemUnit.getCode());
+            failIfConfigured();
+        }
+
+        @Override
+        public void syncActive(String sku, boolean active) {
+            calls.add("active:" + sku + ":" + active);
+            failIfConfigured();
+        }
+
+        private void failIfConfigured() {
+            if (failure != null) {
+                if (failureCall != null && !failureCall.equals(calls.getLast())) {
+                    return;
+                }
+                throw failure;
+            }
         }
     }
 }

@@ -75,6 +75,8 @@ public class GlobalExceptionHandler {
         return switch (ex.getErrorCode()) {
             case ITEM_NOT_FOUND, CATEGORY_NOT_FOUND -> HttpStatus.NOT_FOUND;
             case DUPLICATE_SKU, CONCURRENT_MODIFICATION -> HttpStatus.CONFLICT;
+            case INVENTORY_SYNC_FAILED -> HttpStatus.BAD_GATEWAY;
+            case INVENTORY_SYNC_UNAVAILABLE -> HttpStatus.SERVICE_UNAVAILABLE;
             default -> HttpStatus.BAD_REQUEST;
         };
     }

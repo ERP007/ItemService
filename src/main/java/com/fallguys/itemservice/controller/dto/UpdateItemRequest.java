@@ -12,7 +12,7 @@ public record UpdateItemRequest(
         String categoryCode,
         @Schema(description = "중분류 코드", example = "ENGINE_LUBRICATION")
         String subCategoryCode,
-        @Schema(description = "단위 코드", allowableValues = {"EA", "SET"}, example = "EA")
+        @Schema(description = "단위 코드", allowableValues = {"EA", "BOX", "SET", "L"}, example = "EA")
         String unit,
         @Schema(description = "기준 단가", example = "15000")
         Integer unitPrice,
