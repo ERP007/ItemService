@@ -30,7 +30,9 @@ class ItemErrorCodeTest {
                 () -> assertEquals("ITM-018", ItemErrorCode.INACTIVE_ITEM_CANNOT_BE_MODIFIED.getCode()),
                 () -> assertEquals("ITM-019", ItemErrorCode.ITEM_NOT_FOUND.getCode()),
                 () -> assertEquals("ITM-020", ItemErrorCode.CONCURRENT_MODIFICATION.getCode()),
-                () -> assertEquals("ITM-021", ItemErrorCode.INTERNAL_ERROR.getCode())
+                () -> assertEquals("ITM-021", ItemErrorCode.INTERNAL_ERROR.getCode()),
+                () -> assertEquals("ITM-022", ItemErrorCode.INVENTORY_SYNC_FAILED.getCode()),
+                () -> assertEquals("ITM-023", ItemErrorCode.INVENTORY_SYNC_UNAVAILABLE.getCode())
         );
     }
 }
