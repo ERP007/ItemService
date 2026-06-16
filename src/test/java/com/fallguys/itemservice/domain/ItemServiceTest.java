@@ -311,6 +311,43 @@ class ItemServiceTest {
     }
 
     @Test
+    void compensatesNameSyncWhenUnitSyncFailsAfterNameSyncSucceeded() {
+        itemRepository.save(existingItem("ENG-OIL-5W30-1L", "ENGINE_OIL", true));
+        itemCategoryRepository.addRootCategory("ENGINE");
+        itemCategoryRepository.addSubCategory("ENGINE_FILTER", "ENGINE");
+        InventorySyncUnavailableException syncFailure = new InventorySyncUnavailableException(
+                "재고 서비스에 연결할 수 없습니다: itemUnit",
+                new RuntimeException("timeout")
+        );
+        inventoryItemSynchronizer.failOnCall("unit:ENG-OIL-5W30-1L:SET", syncFailure);
+
+        InventorySyncUnavailableException exception = assertThrows(
+                InventorySyncUnavailableException.class,
+                () -> itemService.updateSelection(new UpdateItemSelectionCommand(
+                        "ENG-OIL-5W30-1L",
+                        "Oil filter",
+                        "ENGINE",
+                        "ENGINE_FILTER",
+                        ItemUnit.SET,
+                        10,
+                        12000
+                ))
+        );
+
+        assertAll(
+                () -> assertSame(syncFailure, exception),
+                () -> assertEquals(
+                        List.of(
+                                "name:ENG-OIL-5W30-1L:Oil filter",
+                                "unit:ENG-OIL-5W30-1L:SET",
+                                "name:ENG-OIL-5W30-1L:Engine oil"
+                        ),
+                        inventoryItemSynchronizer.calls
+                )
+        );
+    }
+
+    @Test
     void failsWhenStatusChangeTargetStateIsAlreadyApplied() {
         itemRepository.save(existingItem("ACTIVE-ITEM", "ENGINE_OIL", true));
         itemRepository.save(existingItem("INACTIVE-ITEM", "ENGINE_OIL", false));
@@ -554,14 +591,21 @@ class ItemServiceTest {
 
         private final List<String> calls = new ArrayList<>();
         private RuntimeException failure;
+        private String failureCall;
 
         void failWith(RuntimeException failure) {
+            this.failure = failure;
+        }
+
+        void failOnCall(String call, RuntimeException failure) {
+            this.failureCall = call;
             this.failure = failure;
         }
 
         void clear() {
             calls.clear();
             failure = null;
+            failureCall = null;
         }
 
         @Override
@@ -584,6 +628,9 @@ class ItemServiceTest {
 
         private void failIfConfigured() {
             if (failure != null) {
+                if (failureCall != null && !failureCall.equals(calls.getLast())) {
+                    return;
+                }
                 throw failure;
             }
         }

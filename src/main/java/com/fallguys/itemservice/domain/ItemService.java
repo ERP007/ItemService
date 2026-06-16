@@ -243,8 +243,9 @@ public class ItemService {
      * 2) 변경할 카테고리 코드가 활성 카테고리인지 확인한다.
      * 3) Item 도메인 모델을 수정하고 저장한다.
      * 4) 부품명 또는 단위가 실제 변경된 경우 Inventory stock 스냅샷을 동기화한다.
+     * 5) 부품명 동기화 후 단위 동기화가 실패하면 부품명을 이전 값으로 보상 갱신한다.
      *
-     * 트랜잭션: 쓰기. Inventory 동기화 실패 시 Item 수정도 롤백한다.
+     * 트랜잭션: 쓰기. Inventory 동기화 실패 시 Item 수정도 롤백한다. 단, Inventory 보상 실패는 원 예외의 suppressed로 보존된다.
      *
      * 예외:
      * - 품목 없음: ItemNotFoundException (저장 전 중단)
@@ -257,6 +258,7 @@ public class ItemService {
         UpdateItemCommand validatedCommand = Objects.requireNonNull(command, "command");
         Item item = getBySku(validatedCommand.sku());
         validateActiveCategory(validatedCommand.categoryCode());
+        String previousName = item.getName();
         boolean nameChanged = !Objects.equals(item.getName(), validatedCommand.name());
         boolean unitChanged = item.getUnit() != validatedCommand.unit();
 
@@ -269,7 +271,7 @@ public class ItemService {
                 clock.instant()
         );
         Item saved = itemRepository.save(item);
-        syncInventoryBasicFields(saved, nameChanged, unitChanged);
+        syncInventoryBasicFields(saved, previousName, nameChanged, unitChanged);
         return saved;
     }
 
@@ -282,8 +284,9 @@ public class ItemService {
      * 3) 대분류와 중분류가 모두 활성이고 부모-자식 관계가 맞는지 확인한다.
      * 4) 최종 중분류 코드로 품목을 수정하고 저장한다.
      * 5) 부품명 또는 단위가 실제 변경된 경우 Inventory stock 스냅샷을 동기화한다.
+     * 6) 부품명 동기화 후 단위 동기화가 실패하면 부품명을 이전 값으로 보상 갱신한다.
      *
-     * 트랜잭션: 쓰기. 검증 실패 또는 Inventory 동기화 실패 시 저장하지 않는다.
+     * 트랜잭션: 쓰기. 검증 실패 또는 Inventory 동기화 실패 시 저장하지 않는다. 단, Inventory 보상 실패는 원 예외의 suppressed로 보존된다.
      *
      * 예외:
      * - 품목 없음: ItemNotFoundException (저장 전 중단)
@@ -299,6 +302,7 @@ public class ItemService {
             throw new InactiveItemCannotBeModifiedException(item.getSku());
         }
         validateCategorySelection(validatedCommand.categoryCode(), validatedCommand.subCategoryCode());
+        String previousName = item.getName();
         boolean nameChanged = !Objects.equals(item.getName(), validatedCommand.name());
         boolean unitChanged = item.getUnit() != validatedCommand.unit();
 
@@ -311,7 +315,7 @@ public class ItemService {
                 clock.instant()
         );
         Item saved = itemRepository.save(item);
-        syncInventoryBasicFields(saved, nameChanged, unitChanged);
+        syncInventoryBasicFields(saved, previousName, nameChanged, unitChanged);
         return findViewBySku(saved.getSku());
     }
 
@@ -421,12 +425,35 @@ public class ItemService {
                 .orElseThrow(() -> new ItemNotFoundException(sku));
     }
 
-    private void syncInventoryBasicFields(Item item, boolean nameChanged, boolean unitChanged) {
+    private void syncInventoryBasicFields(
+            Item item,
+            String previousName,
+            boolean nameChanged,
+            boolean unitChanged
+    ) {
+        boolean nameSynced = false;
         if (nameChanged) {
             inventoryItemSynchronizer.syncName(item.getSku(), item.getName());
+            nameSynced = true;
         }
-        if (unitChanged) {
-            inventoryItemSynchronizer.syncUnit(item.getSku(), item.getUnit());
+        try {
+            if (unitChanged) {
+                inventoryItemSynchronizer.syncUnit(item.getSku(), item.getUnit());
+            }
+        } catch (RuntimeException ex) {
+            compensateNameSync(item.getSku(), previousName, nameSynced, ex);
+            throw ex;
+        }
+    }
+
+    private void compensateNameSync(String sku, String previousName, boolean nameSynced, RuntimeException originalException) {
+        if (!nameSynced) {
+            return;
+        }
+        try {
+            inventoryItemSynchronizer.syncName(sku, previousName);
+        } catch (RuntimeException compensationException) {
+            originalException.addSuppressed(compensationException);
         }
     }
 
