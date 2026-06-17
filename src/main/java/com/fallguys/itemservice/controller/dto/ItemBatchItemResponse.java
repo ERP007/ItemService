@@ -3,8 +3,8 @@ package com.fallguys.itemservice.controller.dto;
 import com.fallguys.itemservice.domain.Item;
 import io.swagger.v3.oas.annotations.media.Schema;
 
-@Schema(description = "내부 서비스용 부품 조회 응답")
-public record InternalItemResponse(
+@Schema(description = "부품 배치 조회 항목 응답")
+public record ItemBatchItemResponse(
         @Schema(description = "부품 SKU", example = "HMC-EN-00214")
         String sku,
         @Schema(description = "부품명", example = "엔진오일 필터 (2.0L gasoline)")
@@ -21,8 +21,8 @@ public record InternalItemResponse(
         boolean active
 ) {
 
-    public static InternalItemResponse from(Item item) {
-        return new InternalItemResponse(
+    public static ItemBatchItemResponse from(Item item) {
+        return new ItemBatchItemResponse(
                 item.getSku(),
                 item.getName(),
                 item.getCategoryCode(),

@@ -3,6 +3,7 @@ package com.fallguys.itemservice.domain;
 import com.fallguys.itemservice.domain.exception.DuplicateItemSkuException;
 import com.fallguys.itemservice.domain.exception.InactiveItemCannotBeModifiedException;
 import com.fallguys.itemservice.domain.exception.InventorySyncUnavailableException;
+import com.fallguys.itemservice.domain.exception.InvalidItemRequestException;
 import com.fallguys.itemservice.domain.exception.InvalidItemStatusException;
 import com.fallguys.itemservice.domain.exception.ItemNotFoundException;
 import com.fallguys.itemservice.domain.exception.UnavailableItemCategoryException;
@@ -221,6 +222,45 @@ class ItemServiceTest {
                         "unit:ENG-OIL-5W30-1L:SET"
                 ),
                 inventoryItemSynchronizer.calls
+        );
+    }
+
+    @Test
+    void updatesSelectionWithRootCategoryWhenNoSubCategories() {
+        itemRepository.save(existingItem("CLT-DSK-MED-01", "ENGINE_OIL", true));
+        itemCategoryRepository.addRootCategory("DRIVETRAIN");
+
+        itemService.updateSelection(new UpdateItemSelectionCommand(
+                "CLT-DSK-MED-01",
+                "Engine oil",
+                "DRIVETRAIN",
+                null,
+                ItemUnit.EA,
+                50,
+                8500
+        ));
+
+        Item updated = itemRepository.findBySku("CLT-DSK-MED-01").orElseThrow();
+        assertEquals("DRIVETRAIN", updated.getCategoryCode());
+    }
+
+    @Test
+    void failsWhenSubCategoryIsMissingForRootCategoryWithSubCategories() {
+        itemRepository.save(existingItem("ENG-OIL-5W30-1L", "ENGINE_OIL", true));
+        itemCategoryRepository.addRootCategory("ENGINE");
+        itemCategoryRepository.addSubCategory("ENGINE_OIL", "ENGINE");
+
+        assertThrows(
+                InvalidItemRequestException.class,
+                () -> itemService.updateSelection(new UpdateItemSelectionCommand(
+                        "ENG-OIL-5W30-1L",
+                        "Engine oil",
+                        "ENGINE",
+                        null,
+                        ItemUnit.EA,
+                        50,
+                        8500
+                ))
         );
     }
 

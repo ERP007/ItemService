@@ -281,8 +281,8 @@ public class ItemService {
      * 흐름:
      * 1) SKU로 기존 품목을 조회한다.
      * 2) 비활성 품목이면 수정을 중단한다.
-     * 3) 대분류와 중분류가 모두 활성이고 부모-자식 관계가 맞는지 확인한다.
-     * 4) 최종 중분류 코드로 품목을 수정하고 저장한다.
+     * 3) 대분류와 선택 중분류가 활성이고 부모-자식 관계가 맞는지 확인한다.
+     * 4) 중분류가 없는 대분류는 대분류 코드, 중분류가 있는 대분류는 중분류 코드로 품목을 수정하고 저장한다.
      * 5) 부품명 또는 단위가 실제 변경된 경우 Inventory stock 스냅샷을 동기화한다.
      * 6) 부품명 동기화 후 단위 동기화가 실패하면 부품명을 이전 값으로 보상 갱신한다.
      *
@@ -301,14 +301,17 @@ public class ItemService {
         if (!item.isActive()) {
             throw new InactiveItemCannotBeModifiedException(item.getSku());
         }
-        validateCategorySelection(validatedCommand.categoryCode(), validatedCommand.subCategoryCode());
+        String selectedCategoryCode = resolveSelectedCategoryCode(
+                validatedCommand.categoryCode(),
+                validatedCommand.subCategoryCode()
+        );
         String previousName = item.getName();
         boolean nameChanged = !Objects.equals(item.getName(), validatedCommand.name());
         boolean unitChanged = item.getUnit() != validatedCommand.unit();
 
         item.update(
                 validatedCommand.name(),
-                validatedCommand.subCategoryCode(),
+                selectedCategoryCode,
                 validatedCommand.unit(),
                 validatedCommand.safetyStock(),
                 validatedCommand.unitPrice(),
@@ -411,13 +414,22 @@ public class ItemService {
                 .toList();
     }
 
-    private void validateCategorySelection(String categoryCode, String subCategoryCode) {
+    private String resolveSelectedCategoryCode(String categoryCode, String subCategoryCode) {
         if (!itemCategoryRepository.existsActiveRootByCode(categoryCode)) {
             throw new InvalidItemRequestException(ItemErrorCode.INVALID_CATEGORY, "대분류가 올바르지 않습니다: " + categoryCode);
         }
-        if (!itemCategoryRepository.existsActiveSubCategoryOf(categoryCode, subCategoryCode)) {
+
+        List<ItemCategory> subCategories = itemCategoryRepository.findSubCategories(categoryCode);
+        if (subCategories.isEmpty()) {
+            if (subCategoryCode != null) {
+                throw new InvalidItemRequestException(ItemErrorCode.INVALID_SUB_CATEGORY, "중분류가 올바르지 않습니다: " + subCategoryCode);
+            }
+            return categoryCode;
+        }
+        if (subCategoryCode == null || subCategories.stream().noneMatch(category -> category.getCode().equals(subCategoryCode))) {
             throw new InvalidItemRequestException(ItemErrorCode.INVALID_SUB_CATEGORY, "중분류가 올바르지 않습니다: " + subCategoryCode);
         }
+        return subCategoryCode;
     }
 
     private ItemView findViewBySku(String sku) {

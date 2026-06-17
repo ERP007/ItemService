@@ -1,10 +1,9 @@
 package com.fallguys.itemservice.controller;
 
-import com.fallguys.itemservice.controller.dto.InternalItemBatchRequest;
-import com.fallguys.itemservice.controller.dto.InternalItemBatchResponse;
 import com.fallguys.itemservice.controller.dto.InternalItemCategoryResponse;
 import com.fallguys.itemservice.controller.dto.InternalItemDetailResponse;
-import com.fallguys.itemservice.controller.dto.InternalItemResponse;
+import com.fallguys.itemservice.controller.dto.ItemBatchRequest;
+import com.fallguys.itemservice.controller.dto.ItemBatchResponse;
 import com.fallguys.itemservice.controller.dto.ItemRequestValidator;
 import com.fallguys.itemservice.domain.Item;
 import com.fallguys.itemservice.domain.ItemService;
@@ -104,7 +103,7 @@ public class InternalItemController {
     )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "내부 부품 배치 조회 성공",
-                    content = @Content(schema = @Schema(implementation = InternalItemBatchResponse.class))),
+                    content = @Content(schema = @Schema(implementation = ItemBatchResponse.class))),
             @ApiResponse(responseCode = "400", description = "skus 누락, SKU 형식 오류, 조회 개수 초과",
                     content = @Content(schema = @Schema(implementation = ProblemDetail.class))),
             @ApiResponse(responseCode = "401", description = "내부 인증 실패",
@@ -114,8 +113,8 @@ public class InternalItemController {
             @ApiResponse(responseCode = "500", description = "서버 내부 오류",
                     content = @Content(schema = @Schema(implementation = ProblemDetail.class)))
     })
-    public InternalItemBatchResponse getInternalItems(
-            @RequestBody(required = false) InternalItemBatchRequest request
+    public ItemBatchResponse getInternalItems(
+            @RequestBody(required = false) ItemBatchRequest request
     ) {
         if (request == null) {
             throw new InvalidItemRequestException(ItemErrorCode.SKUS_REQUIRED, "SKU 목록은 필수입니다.");
@@ -123,6 +122,6 @@ public class InternalItemController {
         List<String> normalizedSkus = request.normalizedSkus();
         List<Item> foundItems = itemService.getBySkus(normalizedSkus);
 
-        return InternalItemBatchResponse.from(normalizedSkus, foundItems);
+        return ItemBatchResponse.from(normalizedSkus, foundItems);
     }
 }
