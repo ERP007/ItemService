@@ -71,7 +71,11 @@ public final class ItemRequestValidator {
     }
 
     public static String requireSubCategoryForUpdate(String subCategoryCode) {
-        return requireCategoryFormat(subCategoryCode, ItemErrorCode.INVALID_CATEGORY_CODE);
+        String normalizedSubCategoryCode = trimToNull(subCategoryCode);
+        if (normalizedSubCategoryCode == null) {
+            return null;
+        }
+        return requireCategoryFormat(normalizedSubCategoryCode, ItemErrorCode.INVALID_CATEGORY_CODE);
     }
 
     public static String requireCategoryForFilter(String categoryCode) {

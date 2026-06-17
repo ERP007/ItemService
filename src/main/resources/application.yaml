@@ -38,3 +38,10 @@ item:
   master-seed:
     enabled: ${ITEM_MASTER_SEED_ENABLED:true}
     location: ${ITEM_MASTER_SEED_LOCATION:classpath:data/items.csv}
+
+inventory:
+  client:
+    base-url: ${INVENTORY_SERVICE_BASE_URL:http://inventory-service:8080}
+    connect-timeout: ${INVENTORY_CLIENT_CONNECT_TIMEOUT:2s}
+    read-timeout: ${INVENTORY_CLIENT_READ_TIMEOUT:3s}
+    retry-max-attempts: ${INVENTORY_CLIENT_RETRY_MAX_ATTEMPTS:2}

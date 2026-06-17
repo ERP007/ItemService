@@ -37,7 +37,11 @@ public enum ItemErrorCode implements ErrorCode {
     CONCURRENT_MODIFICATION("ITM-020", "다른 사용자가 먼저 수정했습니다."),
 
     // 500 INTERNAL_SERVER_ERROR
-    INTERNAL_ERROR("ITM-021", "서버 내부 오류가 발생했습니다.");
+    INTERNAL_ERROR("ITM-021", "서버 내부 오류가 발생했습니다."),
+
+    // 502/503 INVENTORY SERVICE
+    INVENTORY_SYNC_FAILED("ITM-022", "재고 서비스 동기화에 실패했습니다."),
+    INVENTORY_SYNC_UNAVAILABLE("ITM-023", "재고 서비스를 사용할 수 없습니다.");
 
     private final String code;
     private final String defaultMessage;

@@ -39,6 +39,7 @@ import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -262,6 +263,21 @@ class ItemPersistenceTest {
                 () -> assertEquals("엔진", first.parentCategoryName()),
                 () -> assertTrue(found.isPresent()),
                 () -> assertEquals("윤활계통", found.orElseThrow().categoryName())
+        );
+    }
+
+    @Test
+    void findsItemViewWithRootCategory() {
+        saveCategory(ItemCategory.root("DRIVETRAIN", "동력전달", 1, true));
+        itemRepository.save(item("CLT-DSK-MED-01", "클러치 디스크", "DRIVETRAIN", ItemUnit.EA, 10, 145000, true));
+
+        ItemView found = itemRepository.findViewBySku("CLT-DSK-MED-01").orElseThrow();
+
+        assertAll(
+                () -> assertEquals("DRIVETRAIN", found.categoryCode()),
+                () -> assertEquals("동력전달", found.categoryName()),
+                () -> assertNull(found.parentCategoryCode()),
+                () -> assertNull(found.parentCategoryName())
         );
     }
 
