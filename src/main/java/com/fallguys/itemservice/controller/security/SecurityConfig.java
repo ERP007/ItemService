@@ -54,6 +54,7 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(PUBLIC_PATHS).permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/items", "/items").hasAnyRole(WRITE_ROLES)
+                        .requestMatchers(HttpMethod.POST, "/api/items/batch", "/items/batch").hasAnyRole(WRITE_ROLES)
                         .requestMatchers(HttpMethod.POST, "/api/items/code-check", "/items/code-check").hasAnyRole(WRITE_ROLES)
                         .requestMatchers(HttpMethod.PATCH, "/api/items/*", "/items/*").hasAnyRole(WRITE_ROLES)
                         .requestMatchers(HttpMethod.PATCH, "/api/items/*/activate", "/items/*/activate").hasAnyRole(WRITE_ROLES)

@@ -4,6 +4,8 @@ import com.fallguys.itemservice.controller.dto.CodeCheckRequest;
 import com.fallguys.itemservice.controller.dto.CodeCheckResponse;
 import com.fallguys.itemservice.controller.dto.CreateItemRequest;
 import com.fallguys.itemservice.controller.dto.CreateItemResponse;
+import com.fallguys.itemservice.controller.dto.ItemBatchRequest;
+import com.fallguys.itemservice.controller.dto.ItemBatchResponse;
 import com.fallguys.itemservice.controller.dto.ItemDetailResponse;
 import com.fallguys.itemservice.controller.dto.ItemListResponse;
 import com.fallguys.itemservice.controller.dto.ItemRequestValidator;
@@ -131,6 +133,35 @@ public class ItemController {
         ItemView item = itemService.getViewBySku(normalizedSku);
 
         return ItemDetailResponse.from(item);
+    }
+
+    @PostMapping("/batch")
+    @Operation(
+            summary = "부품 배치 조회",
+            description = "발주 라인 렌더링, 재고 처리 등에서 여러 SKU의 부품 마스터 정보를 한 번에 조회합니다. ADMIN, HQ_MANAGER, HQ_STAFF 권한만 허용합니다."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "부품 배치 조회 성공",
+                    content = @Content(schema = @Schema(implementation = ItemBatchResponse.class))),
+            @ApiResponse(responseCode = "400", description = "skus 누락, SKU 형식 오류, 조회 개수 초과",
+                    content = @Content(schema = @Schema(implementation = ProblemDetail.class))),
+            @ApiResponse(responseCode = "401", description = "미인증 사용자",
+                    content = @Content(schema = @Schema(implementation = ProblemDetail.class))),
+            @ApiResponse(responseCode = "403", description = "부품 배치 조회 권한 없음",
+                    content = @Content(schema = @Schema(implementation = ProblemDetail.class))),
+            @ApiResponse(responseCode = "500", description = "서버 내부 오류",
+                    content = @Content(schema = @Schema(implementation = ProblemDetail.class)))
+    })
+    public ItemBatchResponse getItems(
+            @RequestBody(required = false) ItemBatchRequest request
+    ) {
+        if (request == null) {
+            throw new InvalidItemRequestException(ItemErrorCode.SKUS_REQUIRED, "SKU 목록은 필수입니다.");
+        }
+        List<String> normalizedSkus = request.normalizedSkus();
+        List<Item> foundItems = itemService.getBySkus(normalizedSkus);
+
+        return ItemBatchResponse.from(normalizedSkus, foundItems);
     }
 
     @PostMapping

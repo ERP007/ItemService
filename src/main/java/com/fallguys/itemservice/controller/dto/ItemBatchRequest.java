@@ -4,8 +4,8 @@ import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.util.List;
 
-@Schema(description = "내부 서비스용 부품 배치 조회 요청")
-public record InternalItemBatchRequest(
+@Schema(description = "부품 배치 조회 요청")
+public record ItemBatchRequest(
         @Schema(description = "조회할 부품 SKU 목록", example = "[\"HMC-EN-00214\", \"HMC-NO-99999\"]")
         List<String> skus
 ) {

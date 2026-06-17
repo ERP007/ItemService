@@ -127,6 +127,16 @@ class ItemControllerTest {
                         """);
     }
 
+    private static MockHttpServletRequestBuilder itemBatchRequest() {
+        return post("/items/batch")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {
+                          "skus": ["HMC-EN-00214", "HMC-NO-99999"]
+                        }
+                        """);
+    }
+
     @Test
     void allowsWriteApisForAdminAndHeadOfficeRoles() throws Exception {
         when(itemService.createView(any(CreateItemCommand.class))).thenReturn(itemView());
@@ -134,6 +144,8 @@ class ItemControllerTest {
         when(itemService.activate(eq("HMC-WP-00229"))).thenReturn(statusItem(true));
         when(itemService.deactivate(eq("HMC-WP-00229"))).thenReturn(statusItem(false));
         when(itemService.isSkuAvailable(eq("HMC-EN-00214"))).thenReturn(true);
+        when(itemService.getBySkus(eq(List.of("HMC-EN-00214", "HMC-NO-99999"))))
+                .thenReturn(List.of(internalItem()));
 
         for (String role : List.of("ADMIN", "HQ_MANAGER", "HQ_STAFF")) {
             mockMvc.perform(createItemRequest().with(roleJwt(role)))
@@ -145,6 +157,8 @@ class ItemControllerTest {
             mockMvc.perform(deactivateItemRequest().with(roleJwt(role)))
                     .andExpect(status().isOk());
             mockMvc.perform(codeCheckRequest().with(roleJwt(role)))
+                    .andExpect(status().isOk());
+            mockMvc.perform(itemBatchRequest().with(roleJwt(role)))
                     .andExpect(status().isOk());
         }
     }
@@ -172,6 +186,10 @@ class ItemControllerTest {
                     .andExpect(status().isForbidden())
                     .andExpect(jsonPath("$.detail").value("접근 권한이 없습니다."))
                     .andExpect(jsonPath("$.errorCode").doesNotExist());
+            mockMvc.perform(itemBatchRequest().with(roleJwt(role)))
+                    .andExpect(status().isForbidden())
+                    .andExpect(jsonPath("$.detail").value("접근 권한이 없습니다."))
+                    .andExpect(jsonPath("$.errorCode").doesNotExist());
         }
     }
 
@@ -194,6 +212,10 @@ class ItemControllerTest {
                 .andExpect(jsonPath("$.detail").value("인증이 필요합니다."))
                 .andExpect(jsonPath("$.errorCode").doesNotExist());
         mockMvc.perform(codeCheckRequest())
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.detail").value("인증이 필요합니다."))
+                .andExpect(jsonPath("$.errorCode").doesNotExist());
+        mockMvc.perform(itemBatchRequest())
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.detail").value("인증이 필요합니다."))
                 .andExpect(jsonPath("$.errorCode").doesNotExist());
@@ -338,6 +360,109 @@ class ItemControllerTest {
         mockMvc.perform(get("/items/{sku}", "UNKNOWN").with(adminJwt()))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.errorCode").value("ITM-019"));
+    }
+
+    @Test
+    void getsItemsBySkus() throws Exception {
+        when(itemService.getBySkus(eq(List.of("HMC-WP-00229", "HMC-NO-99999", "HMC-EN-00214"))))
+                .thenReturn(List.of(internalItem(), internalItem("HMC-WP-00229", "워터 펌프 어셈블리")));
+
+        mockMvc.perform(post("/items/batch")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "skus": ["HMC-WP-00229", "HMC-NO-99999", "HMC-EN-00214"]
+                                }
+                                """)
+                        .with(adminJwt()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items[0].sku").value("HMC-WP-00229"))
+                .andExpect(jsonPath("$.items[1].sku").value("HMC-EN-00214"))
+                .andExpect(jsonPath("$.items[1].name").value("엔진오일 필터 (2.0L gasoline)"))
+                .andExpect(jsonPath("$.items[1].categoryCode").value("ENGINE_LUBRICATION"))
+                .andExpect(jsonPath("$.items[1].unit").value("EA"))
+                .andExpect(jsonPath("$.items[1].unitPrice").value(15000))
+                .andExpect(jsonPath("$.items[1].safetyStock").value(120))
+                .andExpect(jsonPath("$.items[1].active").value(true))
+                .andExpect(jsonPath("$.items[1].categoryName").doesNotExist())
+                .andExpect(jsonPath("$.items[1].subCategoryCode").doesNotExist())
+                .andExpect(jsonPath("$.items[1].createdAt").doesNotExist())
+                .andExpect(jsonPath("$.items[1].updatedAt").doesNotExist())
+                .andExpect(jsonPath("$.notFoundSkus[0]").value("HMC-NO-99999"));
+
+        verify(itemService).getBySkus(List.of("HMC-WP-00229", "HMC-NO-99999", "HMC-EN-00214"));
+    }
+
+    @Test
+    void deduplicatesBatchSkus() throws Exception {
+        when(itemService.getBySkus(eq(List.of("HMC-EN-00214", "HMC-WP-00229"))))
+                .thenReturn(List.of(internalItem(), internalItem("HMC-WP-00229", "워터 펌프 어셈블리")));
+
+        mockMvc.perform(post("/items/batch")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "skus": ["HMC-EN-00214", "HMC-EN-00214", "HMC-WP-00229"]
+                                }
+                                """)
+                        .with(adminJwt()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items.length()").value(2))
+                .andExpect(jsonPath("$.items[0].sku").value("HMC-EN-00214"))
+                .andExpect(jsonPath("$.items[1].sku").value("HMC-WP-00229"))
+                .andExpect(jsonPath("$.notFoundSkus.length()").value(0));
+
+        verify(itemService).getBySkus(List.of("HMC-EN-00214", "HMC-WP-00229"));
+    }
+
+    @Test
+    void failsWhenBatchSkusAreMissingOrInvalid() throws Exception {
+        mockMvc.perform(post("/items/batch").with(adminJwt()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errorCode").value("ITM-005"));
+
+        mockMvc.perform(post("/items/batch")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}")
+                        .with(adminJwt()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errorCode").value("ITM-005"));
+
+        mockMvc.perform(post("/items/batch")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "skus": []
+                                }
+                                """)
+                        .with(adminJwt()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errorCode").value("ITM-005"));
+
+        mockMvc.perform(post("/items/batch")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "skus": ["HMC-EN-00214", "hmc.wp"]
+                                }
+                                """)
+                        .with(adminJwt()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errorCode").value("ITM-006"));
+    }
+
+    @Test
+    void failsWhenBatchHasTooManySkus() throws Exception {
+        String content = java.util.stream.IntStream.rangeClosed(1, 101)
+                .mapToObj(number -> "\"HMC-EN-" + String.format("%05d", number) + "\"")
+                .collect(java.util.stream.Collectors.joining(",", "{\"skus\":[", "]}"));
+
+        mockMvc.perform(post("/items/batch")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(content)
+                        .with(adminJwt()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errorCode").value("ITM-007"));
     }
 
     @Test
@@ -776,6 +901,8 @@ class ItemControllerTest {
         when(itemService.deactivate(eq("HMC-WP-00229"))).thenReturn(statusItem(false));
         when(itemService.getViewBySku(eq("HMC-EN-00214"))).thenReturn(itemView());
         when(itemService.getUnits()).thenReturn(List.of(ItemUnit.EA, ItemUnit.BOX, ItemUnit.SET, ItemUnit.L));
+        when(itemService.getBySkus(eq(List.of("HMC-EN-00214", "HMC-NO-99999"))))
+                .thenReturn(List.of(internalItem()));
 
         mockMvc.perform(get("/items").with(adminJwt()))
                 .andExpect(status().isOk())
@@ -792,6 +919,9 @@ class ItemControllerTest {
         mockMvc.perform(get("/items/categories/{categoryCode}/sub-categories", "ENGINE").with(adminJwt()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].categoryCode").value("ENGINE_LUBRICATION"));
+        mockMvc.perform(itemBatchRequest().with(adminJwt()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items[0].sku").value("HMC-EN-00214"));
         mockMvc.perform(patch("/items/{sku}/activate", "HMC-WP-00229").with(adminJwt()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.active").value(true));
