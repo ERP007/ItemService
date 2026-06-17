@@ -36,8 +36,10 @@ import org.springframework.test.web.servlet.request.RequestPostProcessor;
 import java.time.Instant;
 import java.util.List;
 
+import static org.hamcrest.Matchers.nullValue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
@@ -286,6 +288,20 @@ class ItemControllerTest {
     }
 
     @Test
+    void searchesItemsWithRootCategoryAsMajorCategory() throws Exception {
+        when(itemService.searchViews(any(SearchItemsQuery.class)))
+                .thenReturn(new PageResult<>(List.of(drivetrainRootItemView()), 0, 10, 1));
+
+        mockMvc.perform(get("/items").with(adminJwt()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].sku").value("HMC-DR-00001"))
+                .andExpect(jsonPath("$.content[0].parentCategoryCode").value("DRIVETRAIN"))
+                .andExpect(jsonPath("$.content[0].parentCategoryName").value("동력전달"))
+                .andExpect(jsonPath("$.content[0].categoryCode").value(nullValue()))
+                .andExpect(jsonPath("$.content[0].categoryName").value(nullValue()));
+    }
+
+    @Test
     void searchesItemsWithFilters() throws Exception {
         when(itemService.searchViews(any(SearchItemsQuery.class)))
                 .thenReturn(new PageResult<>(List.of(), 1, 20, 0));
@@ -346,6 +362,21 @@ class ItemControllerTest {
                 .andExpect(jsonPath("$.updatedAt").value("2026-06-07"));
 
         verify(itemService).getViewBySku("HMC-EN-00214");
+    }
+
+    @Test
+    void getsItemDetailBySkuWhenCategoryHasNoSubCategory() throws Exception {
+        when(itemService.getViewBySku(eq("HMC-DR-00001"))).thenReturn(drivetrainRootItemView());
+
+        mockMvc.perform(get("/items/{sku}", "HMC-DR-00001").with(adminJwt()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.sku").value("HMC-DR-00001"))
+                .andExpect(jsonPath("$.categoryCode").value("DRIVETRAIN"))
+                .andExpect(jsonPath("$.categoryName").value("동력전달"))
+                .andExpect(jsonPath("$.subCategoryCode").value(nullValue()))
+                .andExpect(jsonPath("$.subCategoryName").value(nullValue()));
+
+        verify(itemService).getViewBySku("HMC-DR-00001");
     }
 
     @Test
@@ -676,6 +707,31 @@ class ItemControllerTest {
     }
 
     @Test
+    void createsItemWithRootCategoryAsMajorCategory() throws Exception {
+        when(itemService.createView(any(CreateItemCommand.class))).thenReturn(drivetrainRootItemView());
+
+        mockMvc.perform(post("/items")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "sku": "HMC-DR-00001",
+                                  "name": "클러치 디스크",
+                                  "categoryCode": "DRIVETRAIN",
+                                  "unit": "EA",
+                                  "safetyStock": 10,
+                                  "unitPrice": 145000
+                                }
+                                """)
+                        .with(adminJwt()))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.sku").value("HMC-DR-00001"))
+                .andExpect(jsonPath("$.parentCategoryCode").value("DRIVETRAIN"))
+                .andExpect(jsonPath("$.parentCategoryName").value("동력전달"))
+                .andExpect(jsonPath("$.categoryCode").value(nullValue()))
+                .andExpect(jsonPath("$.categoryName").value(nullValue()));
+    }
+
+    @Test
     void failsWhenCreateRequestIsInvalidOrDuplicated() throws Exception {
         mockMvc.perform(post("/items")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -732,6 +788,53 @@ class ItemControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.categoryCode").value("ENGINE"))
                 .andExpect(jsonPath("$.subCategoryCode").value("ENGINE_LUBRICATION"));
+    }
+
+    @Test
+    void updatesItemWithRootCategoryAndOptionalSubCategory() throws Exception {
+        when(itemService.updateSelection(any(UpdateItemSelectionCommand.class))).thenReturn(drivetrainRootItemView());
+
+        mockMvc.perform(patch("/items/{sku}", "HMC-DR-00001")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "name": "클러치 디스크",
+                                  "categoryCode": "DRIVETRAIN",
+                                  "unit": "EA",
+                                  "unitPrice": 145000,
+                                  "safetyStock": 10
+                                }
+                                """)
+                        .with(adminJwt()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.categoryCode").value("DRIVETRAIN"))
+                .andExpect(jsonPath("$.categoryName").value("동력전달"))
+                .andExpect(jsonPath("$.subCategoryCode").value(nullValue()))
+                .andExpect(jsonPath("$.subCategoryName").value(nullValue()));
+
+        mockMvc.perform(patch("/items/{sku}", "HMC-DR-00001")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "name": "클러치 디스크",
+                                  "categoryCode": "DRIVETRAIN",
+                                  "subCategoryCode": " ",
+                                  "unit": "EA",
+                                  "unitPrice": 145000,
+                                  "safetyStock": 10
+                                }
+                                """)
+                        .with(adminJwt()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.categoryCode").value("DRIVETRAIN"))
+                .andExpect(jsonPath("$.subCategoryCode").value(nullValue()));
+
+        ArgumentCaptor<UpdateItemSelectionCommand> captor = ArgumentCaptor.forClass(UpdateItemSelectionCommand.class);
+        verify(itemService, times(2)).updateSelection(captor.capture());
+        org.junit.jupiter.api.Assertions.assertAll(
+                () -> org.junit.jupiter.api.Assertions.assertNull(captor.getAllValues().get(0).subCategoryCode()),
+                () -> org.junit.jupiter.api.Assertions.assertNull(captor.getAllValues().get(1).subCategoryCode())
+        );
     }
 
     @Test
@@ -972,6 +1075,23 @@ class ItemControllerTest {
                 ItemUnit.EA,
                 120,
                 15000,
+                true,
+                CREATED_AT,
+                UPDATED_AT
+        );
+    }
+
+    private static ItemView drivetrainRootItemView() {
+        return new ItemView(
+                "HMC-DR-00001",
+                "클러치 디스크",
+                "DRIVETRAIN",
+                "동력전달",
+                null,
+                null,
+                ItemUnit.EA,
+                10,
+                145000,
                 true,
                 CREATED_AT,
                 UPDATED_AT

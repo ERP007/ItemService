@@ -16,7 +16,7 @@ public record UpdateItemSelectionCommand(
         sku = requireText(sku, "sku");
         name = requireText(name, "name");
         categoryCode = requireText(categoryCode, "categoryCode");
-        subCategoryCode = requireText(subCategoryCode, "subCategoryCode");
+        subCategoryCode = trimToNull(subCategoryCode);
         if (unit == null) {
             throw new InvalidItemException("단위는 필수입니다.");
         }
@@ -31,6 +31,13 @@ public record UpdateItemSelectionCommand(
     private static String requireText(String value, String fieldName) {
         if (value == null || value.isBlank()) {
             throw new InvalidItemException("필수값이 누락되었습니다: " + fieldName);
+        }
+        return value.trim();
+    }
+
+    private static String trimToNull(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
         }
         return value.trim();
     }
