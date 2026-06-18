@@ -166,7 +166,7 @@ class ItemControllerTest {
     }
 
     @Test
-    void rejectsWriteApisForBranchRoles() throws Exception {
+    void rejectsMutatingWriteApisForBranchRoles() throws Exception {
         for (String role : List.of("BRANCH_MANAGER", "BRANCH_STAFF")) {
             mockMvc.perform(createItemRequest().with(roleJwt(role)))
                     .andExpect(status().isForbidden())
@@ -188,7 +188,33 @@ class ItemControllerTest {
                     .andExpect(status().isForbidden())
                     .andExpect(jsonPath("$.detail").value("접근 권한이 없습니다."))
                     .andExpect(jsonPath("$.errorCode").doesNotExist());
+        }
+    }
+
+    @Test
+    void allowsItemBatchForBranchRoles() throws Exception {
+        when(itemService.getBySkus(eq(List.of("HMC-EN-00214", "HMC-NO-99999"))))
+                .thenReturn(List.of(internalItem()));
+
+        for (String role : List.of("BRANCH_MANAGER", "BRANCH_STAFF")) {
             mockMvc.perform(itemBatchRequest().with(roleJwt(role)))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.items[0].sku").value("HMC-EN-00214"))
+                    .andExpect(jsonPath("$.notFoundSkus[0]").value("HMC-NO-99999"));
+        }
+    }
+
+    @Test
+    void rejectsApiItemBatchForBranchRoles() throws Exception {
+        for (String role : List.of("BRANCH_MANAGER", "BRANCH_STAFF")) {
+            mockMvc.perform(post("/api/items/batch")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("""
+                                    {
+                                      "skus": ["HMC-EN-00214", "HMC-NO-99999"]
+                                    }
+                                    """)
+                            .with(roleJwt(role)))
                     .andExpect(status().isForbidden())
                     .andExpect(jsonPath("$.detail").value("접근 권한이 없습니다."))
                     .andExpect(jsonPath("$.errorCode").doesNotExist());

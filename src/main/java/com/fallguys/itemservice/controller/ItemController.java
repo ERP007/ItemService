@@ -138,7 +138,7 @@ public class ItemController {
     @PostMapping("/batch")
     @Operation(
             summary = "부품 배치 조회",
-            description = "발주 라인 렌더링, 재고 처리 등에서 여러 SKU의 부품 마스터 정보를 한 번에 조회합니다. ADMIN, HQ_MANAGER, HQ_STAFF 권한만 허용합니다."
+            description = "발주 라인 렌더링, 재고 처리 등에서 여러 SKU의 부품 마스터 정보를 한 번에 조회합니다. ADMIN, HQ_MANAGER, HQ_STAFF, BRANCH_MANAGER, BRANCH_STAFF 권한만 허용합니다."
     )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "부품 배치 조회 성공",
