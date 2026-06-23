@@ -51,11 +51,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 })
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 @TestPropertySource(properties = {
-        "spring.datasource.url=jdbc:h2:mem:item_persistence_test;MODE=PostgreSQL;DB_CLOSE_DELAY=-1",
+        "spring.datasource.url=jdbc:h2:mem:item_persistence_test;MODE=PostgreSQL;INIT=CREATE DOMAIN IF NOT EXISTS JSONB AS JSON;DB_CLOSE_DELAY=-1",
         "spring.datasource.driver-class-name=org.h2.Driver",
         "spring.datasource.username=sa",
         "spring.datasource.password=",
         "spring.jpa.hibernate.ddl-auto=validate",
+        "messaging.outbox.relay.enabled=false",
         "spring.flyway.enabled=true"
 })
 class ItemPersistenceTest {
@@ -83,7 +84,8 @@ class ItemPersistenceTest {
         assertAll(
                 () -> assertDoesNotThrow(() -> jdbcTemplate.queryForObject("select count(*) from item_categories", Long.class)),
                 () -> assertDoesNotThrow(() -> jdbcTemplate.queryForObject("select count(*) from items", Long.class)),
-                () -> assertDoesNotThrow(() -> jdbcTemplate.queryForObject("select count(version) from items", Long.class))
+                () -> assertDoesNotThrow(() -> jdbcTemplate.queryForObject("select count(version) from items", Long.class)),
+                () -> assertDoesNotThrow(() -> jdbcTemplate.queryForObject("select count(*) from outbox_event", Long.class))
         );
     }
 

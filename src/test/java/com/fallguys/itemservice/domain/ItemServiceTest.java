@@ -2,7 +2,6 @@ package com.fallguys.itemservice.domain;
 
 import com.fallguys.itemservice.domain.exception.DuplicateItemSkuException;
 import com.fallguys.itemservice.domain.exception.InactiveItemCannotBeModifiedException;
-import com.fallguys.itemservice.domain.exception.InventorySyncUnavailableException;
 import com.fallguys.itemservice.domain.exception.InvalidItemRequestException;
 import com.fallguys.itemservice.domain.exception.InvalidItemStatusException;
 import com.fallguys.itemservice.domain.exception.ItemNotFoundException;
@@ -33,15 +32,15 @@ class ItemServiceTest {
 
     private FakeItemRepository itemRepository;
     private FakeItemCategoryRepository itemCategoryRepository;
-    private FakeInventoryItemSynchronizer inventoryItemSynchronizer;
+    private FakeItemSnapshotEventPublisher itemSnapshotEventPublisher;
     private ItemService itemService;
 
     @BeforeEach
     void setUp() {
         itemRepository = new FakeItemRepository();
         itemCategoryRepository = new FakeItemCategoryRepository();
-        inventoryItemSynchronizer = new FakeInventoryItemSynchronizer();
-        itemService = new ItemService(itemRepository, itemCategoryRepository, inventoryItemSynchronizer, CLOCK);
+        itemSnapshotEventPublisher = new FakeItemSnapshotEventPublisher();
+        itemService = new ItemService(itemRepository, itemCategoryRepository, itemSnapshotEventPublisher, CLOCK);
     }
 
     @Test
@@ -191,17 +190,14 @@ class ItemServiceTest {
                 () -> assertEquals(12000, updated.getUnitPrice()),
                 () -> assertEquals(NOW, updated.getUpdatedAt()),
                 () -> assertEquals(
-                        List.of(
-                                "name:ENG-OIL-5W30-1L:Oil filter",
-                                "unit:ENG-OIL-5W30-1L:SET"
-                        ),
-                        inventoryItemSynchronizer.calls
+                        List.of("snapshot:ENG-OIL-5W30-1L:Oil filter:SET:true"),
+                        itemSnapshotEventPublisher.calls
                 )
         );
     }
 
     @Test
-    void syncsInventoryOnlyWhenSelectionUpdateChangesReplicatedFields() {
+    void publishesSnapshotOnlyWhenSelectionUpdateChangesReplicatedFields() {
         itemRepository.save(existingItem("ENG-OIL-5W30-1L", "ENGINE_OIL", true));
         itemCategoryRepository.addRootCategory("ENGINE");
         itemCategoryRepository.addSubCategory("ENGINE_FILTER", "ENGINE");
@@ -217,11 +213,8 @@ class ItemServiceTest {
         ));
 
         assertEquals(
-                List.of(
-                        "name:ENG-OIL-5W30-1L:Oil filter",
-                        "unit:ENG-OIL-5W30-1L:SET"
-                ),
-                inventoryItemSynchronizer.calls
+                List.of("snapshot:ENG-OIL-5W30-1L:Oil filter:SET:true"),
+                itemSnapshotEventPublisher.calls
         );
     }
 
@@ -265,7 +258,7 @@ class ItemServiceTest {
     }
 
     @Test
-    void skipsInventorySyncWhenSelectionUpdateDoesNotChangeReplicatedFields() {
+    void skipsSnapshotEventWhenSelectionUpdateDoesNotChangeReplicatedFields() {
         itemRepository.save(existingItem("ENG-OIL-5W30-1L", "ENGINE_OIL", true));
         itemCategoryRepository.addRootCategory("ENGINE");
         itemCategoryRepository.addSubCategory("ENGINE_OIL", "ENGINE");
@@ -280,7 +273,7 @@ class ItemServiceTest {
                 9000
         ));
 
-        assertTrue(inventoryItemSynchronizer.calls.isEmpty());
+        assertTrue(itemSnapshotEventPublisher.calls.isEmpty());
     }
 
     @Test
@@ -310,80 +303,38 @@ class ItemServiceTest {
         assertAll(
                 () -> assertTrue(activated.isActive()),
                 () -> assertEquals(NOW, activated.getUpdatedAt()),
-                () -> assertEquals(List.of("active:ENG-OIL-5W30-1L:true"), inventoryItemSynchronizer.calls)
+                () -> assertEquals(List.of("snapshot:ENG-OIL-5W30-1L:Engine oil:EA:true"), itemSnapshotEventPublisher.calls)
         );
 
-        inventoryItemSynchronizer.clear();
+        itemSnapshotEventPublisher.clear();
         Item deactivated = itemService.deactivate("ENG-OIL-5W30-1L");
 
         assertAll(
                 () -> assertFalse(deactivated.isActive()),
                 () -> assertEquals(NOW, deactivated.getUpdatedAt()),
-                () -> assertEquals(List.of("active:ENG-OIL-5W30-1L:false"), inventoryItemSynchronizer.calls)
+                () -> assertEquals(List.of("snapshot:ENG-OIL-5W30-1L:Engine oil:EA:false"), itemSnapshotEventPublisher.calls)
         );
     }
 
     @Test
-    void propagatesInventorySyncFailureAfterLocalUpdateAttempt() {
+    void publishesOneSnapshotEventWhenNameAndUnitChangeTogether() {
         itemRepository.save(existingItem("ENG-OIL-5W30-1L", "ENGINE_OIL", true));
         itemCategoryRepository.addRootCategory("ENGINE");
         itemCategoryRepository.addSubCategory("ENGINE_FILTER", "ENGINE");
-        InventorySyncUnavailableException syncFailure = new InventorySyncUnavailableException(
-                "재고 서비스에 연결할 수 없습니다: itemName",
-                new RuntimeException("timeout")
-        );
-        inventoryItemSynchronizer.failWith(syncFailure);
 
-        InventorySyncUnavailableException exception = assertThrows(
-                InventorySyncUnavailableException.class,
-                () -> itemService.updateSelection(new UpdateItemSelectionCommand(
-                        "ENG-OIL-5W30-1L",
-                        "Oil filter",
-                        "ENGINE",
-                        "ENGINE_FILTER",
-                        ItemUnit.SET,
-                        10,
-                        12000
-                ))
-        );
+        itemService.updateSelection(new UpdateItemSelectionCommand(
+                "ENG-OIL-5W30-1L",
+                "Oil filter",
+                "ENGINE",
+                "ENGINE_FILTER",
+                ItemUnit.SET,
+                10,
+                12000
+        ));
 
-        assertSame(syncFailure, exception);
-    }
-
-    @Test
-    void compensatesNameSyncWhenUnitSyncFailsAfterNameSyncSucceeded() {
-        itemRepository.save(existingItem("ENG-OIL-5W30-1L", "ENGINE_OIL", true));
-        itemCategoryRepository.addRootCategory("ENGINE");
-        itemCategoryRepository.addSubCategory("ENGINE_FILTER", "ENGINE");
-        InventorySyncUnavailableException syncFailure = new InventorySyncUnavailableException(
-                "재고 서비스에 연결할 수 없습니다: itemUnit",
-                new RuntimeException("timeout")
-        );
-        inventoryItemSynchronizer.failOnCall("unit:ENG-OIL-5W30-1L:SET", syncFailure);
-
-        InventorySyncUnavailableException exception = assertThrows(
-                InventorySyncUnavailableException.class,
-                () -> itemService.updateSelection(new UpdateItemSelectionCommand(
-                        "ENG-OIL-5W30-1L",
-                        "Oil filter",
-                        "ENGINE",
-                        "ENGINE_FILTER",
-                        ItemUnit.SET,
-                        10,
-                        12000
-                ))
-        );
-
-        assertAll(
-                () -> assertSame(syncFailure, exception),
-                () -> assertEquals(
-                        List.of(
-                                "name:ENG-OIL-5W30-1L:Oil filter",
-                                "unit:ENG-OIL-5W30-1L:SET",
-                                "name:ENG-OIL-5W30-1L:Engine oil"
-                        ),
-                        inventoryItemSynchronizer.calls
-                )
+        assertEquals(
+                List.of("snapshot:ENG-OIL-5W30-1L:Oil filter:SET:true"),
+                itemSnapshotEventPublisher.calls
         );
     }
 
@@ -627,52 +578,22 @@ class ItemServiceTest {
         }
     }
 
-    private static class FakeInventoryItemSynchronizer implements InventoryItemSynchronizer {
+    private static class FakeItemSnapshotEventPublisher implements ItemSnapshotEventPublisher {
 
         private final List<String> calls = new ArrayList<>();
-        private RuntimeException failure;
-        private String failureCall;
-
-        void failWith(RuntimeException failure) {
-            this.failure = failure;
-        }
-
-        void failOnCall(String call, RuntimeException failure) {
-            this.failureCall = call;
-            this.failure = failure;
-        }
 
         void clear() {
             calls.clear();
-            failure = null;
-            failureCall = null;
         }
 
         @Override
-        public void syncName(String sku, String itemName) {
-            calls.add("name:" + sku + ":" + itemName);
-            failIfConfigured();
-        }
-
-        @Override
-        public void syncUnit(String sku, ItemUnit itemUnit) {
-            calls.add("unit:" + sku + ":" + itemUnit.getCode());
-            failIfConfigured();
-        }
-
-        @Override
-        public void syncActive(String sku, boolean active) {
-            calls.add("active:" + sku + ":" + active);
-            failIfConfigured();
-        }
-
-        private void failIfConfigured() {
-            if (failure != null) {
-                if (failureCall != null && !failureCall.equals(calls.getLast())) {
-                    return;
-                }
-                throw failure;
-            }
+        public void publishChanged(Item item) {
+            calls.add("snapshot:%s:%s:%s:%s".formatted(
+                    item.getSku(),
+                    item.getName(),
+                    item.getUnit().getCode(),
+                    item.isActive()
+            ));
         }
     }
 }
