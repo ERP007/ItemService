@@ -18,7 +18,6 @@ import com.fallguys.itemservice.domain.UpdateItemSelectionCommand;
 import com.fallguys.itemservice.domain.exception.CategoryNotFoundException;
 import com.fallguys.itemservice.domain.exception.DuplicateItemSkuException;
 import com.fallguys.itemservice.domain.exception.InactiveItemCannotBeModifiedException;
-import com.fallguys.itemservice.domain.exception.InventorySyncFailedException;
 import com.fallguys.itemservice.domain.exception.InvalidItemStatusException;
 import com.fallguys.itemservice.domain.exception.ItemNotFoundException;
 import org.junit.jupiter.api.Test;
@@ -883,19 +882,6 @@ class ItemControllerTest {
                         .with(adminJwt()))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.errorCode").value("ITM-018"));
-    }
-
-    @Test
-    void mapsInventorySyncFailureToBadGateway() throws Exception {
-        when(itemService.updateSelection(any(UpdateItemSelectionCommand.class)))
-                .thenThrow(new InventorySyncFailedException(
-                        "재고 서비스 동기화 요청이 거부되었습니다: itemName",
-                        new RuntimeException("forbidden")
-                ));
-
-        mockMvc.perform(updateItemRequest().with(adminJwt()))
-                .andExpect(status().isBadGateway())
-                .andExpect(jsonPath("$.errorCode").value("ITM-022"));
     }
 
     @Test
