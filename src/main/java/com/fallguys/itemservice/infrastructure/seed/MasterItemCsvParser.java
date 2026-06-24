@@ -1,5 +1,6 @@
 package com.fallguys.itemservice.infrastructure.seed;
 
+import com.fallguys.itemservice.domain.ItemSkuPolicy;
 import com.fallguys.itemservice.domain.ItemUnit;
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVParser;
@@ -64,7 +65,7 @@ class MasterItemCsvParser {
 
     private static MasterItemCsvRow parseRecord(CSVRecord record) {
         long recordNumber = record.getRecordNumber();
-        String sku = requireText(record, "sku");
+        String sku = requireSku(record);
         String name = requireText(record, "name");
         String categoryDisplayPath = requireText(record, "category");
         String categoryCode = MasterItemCategoryMapping.requireFinalCategory(categoryDisplayPath, recordNumber)
@@ -87,6 +88,14 @@ class MasterItemCsvParser {
             throw new MasterItemSeedException("CSV 필수값이 누락되었습니다. 행=" + record.getRecordNumber() + ", 컬럼=" + header);
         }
         return value.trim();
+    }
+
+    private static String requireSku(CSVRecord record) {
+        String sku = requireText(record, "sku");
+        if (!ItemSkuPolicy.isValid(sku)) {
+            throw new MasterItemSeedException("CSV SKU 형식이 올바르지 않습니다. 행=" + record.getRecordNumber() + ", sku=" + sku);
+        }
+        return sku;
     }
 
     private static ItemUnit parseUnit(String unit, long recordNumber) {

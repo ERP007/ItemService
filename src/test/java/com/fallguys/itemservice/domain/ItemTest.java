@@ -81,6 +81,16 @@ class ItemTest {
     }
 
     @Test
+    void failsWhenSkuFormatIsInvalid() {
+        InvalidItemException exception = assertThrows(
+                InvalidItemException.class,
+                () -> Item.create("eng.oil", "Engine oil", "ENGINE_OIL", ItemUnit.EA, 50, 8500, CREATED_AT)
+        );
+
+        assertEquals("SKU 형식이 올바르지 않습니다: eng.oil", exception.getMessage());
+    }
+
+    @Test
     void updatesEditableFieldsAndUpdatedAt() {
         Item item = Item.create("ENG-OIL-5W30-1L", "Engine oil", "ENGINE_OIL", ItemUnit.EA, 50, 8500, CREATED_AT);
 

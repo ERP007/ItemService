@@ -21,6 +21,18 @@ spring:
         jwt:
           issuer-uri: ${KEYCLOAK_ISSUER_URI:http://localhost:9001/realms/master}
           jwk-set-uri: ${KEYCLOAK_JWK_SET_URI:http://localhost:9001/realms/master/protocol/openid-connect/certs}
+  rabbitmq:
+    host: ${SPRING_RABBITMQ_HOST:localhost}
+    port: ${SPRING_RABBITMQ_PORT:5672}
+    username: ${SPRING_RABBITMQ_USERNAME:guest}
+    password: ${SPRING_RABBITMQ_PASSWORD:guest}
+    publisher-confirm-type: correlated
+    publisher-returns: true
+  data:
+    redis:
+      host: ${SPRING_DATA_REDIS_HOST:${SPRING_REDIS_HOST:${REDIS_HOST:localhost}}}
+      port: ${SPRING_DATA_REDIS_PORT:${SPRING_REDIS_PORT:${REDIS_PORT:6379}}}
+      password: ${SPRING_DATA_REDIS_PASSWORD:${SPRING_REDIS_PASSWORD:${REDIS_PASSWORD:}}}
 
 springdoc:
   paths-to-match: /items/**
@@ -38,10 +50,16 @@ item:
   master-seed:
     enabled: ${ITEM_MASTER_SEED_ENABLED:true}
     location: ${ITEM_MASTER_SEED_LOCATION:classpath:data/items.csv}
+  cache:
+    detail:
+      ttl: ${ITEM_DETAIL_CACHE_TTL:20m}
 
-inventory:
-  client:
-    base-url: ${INVENTORY_SERVICE_BASE_URL:http://inventory-service:8080}
-    connect-timeout: ${INVENTORY_CLIENT_CONNECT_TIMEOUT:2s}
-    read-timeout: ${INVENTORY_CLIENT_READ_TIMEOUT:3s}
-    retry-max-attempts: ${INVENTORY_CLIENT_RETRY_MAX_ATTEMPTS:2}
+messaging:
+  outbox:
+    relay:
+      enabled: ${OUTBOX_RELAY_ENABLED:true}
+      batch-size: ${OUTBOX_RELAY_BATCH_SIZE:50}
+      fixed-delay-ms: ${OUTBOX_RELAY_FIXED_DELAY_MS:2000}
+      max-attempts: ${OUTBOX_RELAY_MAX_ATTEMPTS:10}
+      retry-delay-seconds: ${OUTBOX_RELAY_RETRY_DELAY_SECONDS:30}
+      confirm-timeout-ms: ${OUTBOX_RELAY_CONFIRM_TIMEOUT_MS:5000}

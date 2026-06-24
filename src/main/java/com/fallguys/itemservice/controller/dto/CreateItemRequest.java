@@ -12,7 +12,7 @@ public record CreateItemRequest(
         String name,
         @Schema(description = "최종 선택된 중분류 코드", example = "ENGINE_LUBRICATION")
         String categoryCode,
-        @Schema(description = "단위 코드", allowableValues = {"EA", "SET"}, example = "EA")
+        @Schema(description = "단위 코드", allowableValues = {"EA", "BOX", "SET", "L"}, example = "EA")
         String unit,
         @Schema(description = "안전재고 기준", example = "120")
         Integer safetyStock,

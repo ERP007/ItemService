@@ -1,5 +1,6 @@
 package com.fallguys.itemservice.domain;
 
+import com.fallguys.itemservice.config.ItemCacheNames;
 import com.fallguys.itemservice.domain.exception.DuplicateItemSkuException;
 import com.fallguys.itemservice.domain.exception.InvalidItemException;
 import com.fallguys.itemservice.domain.exception.InactiveItemCannotBeModifiedException;
@@ -9,6 +10,9 @@ import com.fallguys.itemservice.domain.exception.CategoryNotFoundException;
 import com.fallguys.itemservice.domain.exception.InvalidItemRequestException;
 import com.fallguys.itemservice.domain.exception.ItemErrorCode;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.CachePut;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -22,31 +26,31 @@ public class ItemService {
 
     private final ItemRepository itemRepository;
     private final ItemCategoryRepository itemCategoryRepository;
-    private final InventoryItemSynchronizer inventoryItemSynchronizer;
+    private final ItemSnapshotEventPublisher itemSnapshotEventPublisher;
     private final Clock clock;
 
     @Autowired
     public ItemService(
             ItemRepository itemRepository,
             ItemCategoryRepository itemCategoryRepository,
-            InventoryItemSynchronizer inventoryItemSynchronizer
+            ItemSnapshotEventPublisher itemSnapshotEventPublisher
     ) {
-        this(itemRepository, itemCategoryRepository, inventoryItemSynchronizer, Clock.systemUTC());
+        this(itemRepository, itemCategoryRepository, itemSnapshotEventPublisher, Clock.systemUTC());
     }
 
     ItemService(ItemRepository itemRepository, ItemCategoryRepository itemCategoryRepository, Clock clock) {
-        this(itemRepository, itemCategoryRepository, new NoopInventoryItemSynchronizer(), clock);
+        this(itemRepository, itemCategoryRepository, new NoopItemSnapshotEventPublisher(), clock);
     }
 
     ItemService(
             ItemRepository itemRepository,
             ItemCategoryRepository itemCategoryRepository,
-            InventoryItemSynchronizer inventoryItemSynchronizer,
+            ItemSnapshotEventPublisher itemSnapshotEventPublisher,
             Clock clock
     ) {
         this.itemRepository = Objects.requireNonNull(itemRepository, "itemRepository");
         this.itemCategoryRepository = Objects.requireNonNull(itemCategoryRepository, "itemCategoryRepository");
-        this.inventoryItemSynchronizer = Objects.requireNonNull(inventoryItemSynchronizer, "inventoryItemSynchronizer");
+        this.itemSnapshotEventPublisher = Objects.requireNonNull(itemSnapshotEventPublisher, "itemSnapshotEventPublisher");
         this.clock = Objects.requireNonNull(clock, "clock");
     }
 
@@ -154,6 +158,9 @@ public class ItemService {
      * - 품목 없음: ItemNotFoundException (롤백 대상 변경 없음)
      */
     @Transactional(readOnly = true)
+    @Cacheable(cacheNames = ItemCacheNames.ITEM_DETAIL,
+            key = "T(com.fallguys.itemservice.config.ItemCacheKeys).detail(#sku)",
+            unless = "#result == null")
     public ItemView getViewBySku(String sku) {
         String normalizedSku = requireText(sku, "sku");
 
@@ -229,6 +236,9 @@ public class ItemService {
      * - create(command)의 예외와 동일하다.
      */
     @Transactional
+    @CachePut(cacheNames = ItemCacheNames.ITEM_DETAIL,
+            key = "T(com.fallguys.itemservice.config.ItemCacheKeys).detail(#result.sku())",
+            unless = "#result == null")
     public ItemView createView(CreateItemCommand command) {
         Item item = create(command);
 
@@ -242,23 +252,22 @@ public class ItemService {
      * 1) SKU로 기존 품목을 조회한다.
      * 2) 변경할 카테고리 코드가 활성 카테고리인지 확인한다.
      * 3) Item 도메인 모델을 수정하고 저장한다.
-     * 4) 부품명 또는 단위가 실제 변경된 경우 Inventory stock 스냅샷을 동기화한다.
-     * 5) 부품명 동기화 후 단위 동기화가 실패하면 부품명을 이전 값으로 보상 갱신한다.
+     * 4) 부품명 또는 단위가 실제 변경된 경우 item snapshot 변경 이벤트를 outbox에 저장한다.
      *
-     * 트랜잭션: 쓰기. Inventory 동기화 실패 시 Item 수정도 롤백한다. 단, Inventory 보상 실패는 원 예외의 suppressed로 보존된다.
+     * 트랜잭션: 쓰기. Item 수정과 outbox 저장은 같은 트랜잭션에서 커밋된다.
      *
      * 예외:
      * - 품목 없음: ItemNotFoundException (저장 전 중단)
      * - 카테고리 사용 불가: UnavailableItemCategoryException (저장 전 중단)
      * - 품목 불변식 위반: InvalidItemException (저장 전 중단)
-     * - Inventory 동기화 실패: InventorySyncFailedException/InventorySyncUnavailableException (롤백)
      */
     @Transactional
+    @CacheEvict(cacheNames = ItemCacheNames.ITEM_DETAIL,
+            key = "T(com.fallguys.itemservice.config.ItemCacheKeys).detail(#command == null ? null : #command.sku())")
     public Item update(UpdateItemCommand command) {
         UpdateItemCommand validatedCommand = Objects.requireNonNull(command, "command");
         Item item = getBySku(validatedCommand.sku());
         validateActiveCategory(validatedCommand.categoryCode());
-        String previousName = item.getName();
         boolean nameChanged = !Objects.equals(item.getName(), validatedCommand.name());
         boolean unitChanged = item.getUnit() != validatedCommand.unit();
 
@@ -271,7 +280,7 @@ public class ItemService {
                 clock.instant()
         );
         Item saved = itemRepository.save(item);
-        syncInventoryBasicFields(saved, previousName, nameChanged, unitChanged);
+        publishSnapshotChangedIfNeeded(saved, nameChanged, unitChanged);
         return saved;
     }
 
@@ -283,18 +292,19 @@ public class ItemService {
      * 2) 비활성 품목이면 수정을 중단한다.
      * 3) 대분류와 선택 중분류가 활성이고 부모-자식 관계가 맞는지 확인한다.
      * 4) 중분류가 없는 대분류는 대분류 코드, 중분류가 있는 대분류는 중분류 코드로 품목을 수정하고 저장한다.
-     * 5) 부품명 또는 단위가 실제 변경된 경우 Inventory stock 스냅샷을 동기화한다.
-     * 6) 부품명 동기화 후 단위 동기화가 실패하면 부품명을 이전 값으로 보상 갱신한다.
+     * 5) 부품명 또는 단위가 실제 변경된 경우 item snapshot 변경 이벤트를 outbox에 저장한다.
      *
-     * 트랜잭션: 쓰기. 검증 실패 또는 Inventory 동기화 실패 시 저장하지 않는다. 단, Inventory 보상 실패는 원 예외의 suppressed로 보존된다.
+     * 트랜잭션: 쓰기. 검증 실패 시 저장하지 않는다. Item 수정과 outbox 저장은 같은 트랜잭션에서 커밋된다.
      *
      * 예외:
      * - 품목 없음: ItemNotFoundException (저장 전 중단)
      * - 비활성 품목 수정: InactiveItemCannotBeModifiedException (저장 전 중단)
      * - 잘못된 대분류/중분류: InvalidItemRequestException (저장 전 중단)
-     * - Inventory 동기화 실패: InventorySyncFailedException/InventorySyncUnavailableException (롤백)
      */
     @Transactional
+    @CachePut(cacheNames = ItemCacheNames.ITEM_DETAIL,
+            key = "T(com.fallguys.itemservice.config.ItemCacheKeys).detail(#result.sku())",
+            unless = "#result == null")
     public ItemView updateSelection(UpdateItemSelectionCommand command) {
         UpdateItemSelectionCommand validatedCommand = Objects.requireNonNull(command, "command");
         Item item = getBySku(validatedCommand.sku());
@@ -305,7 +315,6 @@ public class ItemService {
                 validatedCommand.categoryCode(),
                 validatedCommand.subCategoryCode()
         );
-        String previousName = item.getName();
         boolean nameChanged = !Objects.equals(item.getName(), validatedCommand.name());
         boolean unitChanged = item.getUnit() != validatedCommand.unit();
 
@@ -318,7 +327,7 @@ public class ItemService {
                 clock.instant()
         );
         Item saved = itemRepository.save(item);
-        syncInventoryBasicFields(saved, previousName, nameChanged, unitChanged);
+        publishSnapshotChangedIfNeeded(saved, nameChanged, unitChanged);
         return findViewBySku(saved.getSku());
     }
 
@@ -329,22 +338,23 @@ public class ItemService {
      * 1) SKU로 기존 품목을 조회한다.
      * 2) 이미 활성 상태인지 도메인 모델이 검증한다.
      * 3) Item 도메인 모델의 활성 상태를 변경하고 저장한다.
-     * 4) Inventory stock 스냅샷의 활성 상태를 동기화한다.
+     * 4) item snapshot 변경 이벤트를 outbox에 저장한다.
      *
-     * 트랜잭션: 쓰기. Inventory 동기화 실패 시 Item 상태 변경도 롤백한다.
+     * 트랜잭션: 쓰기. Item 상태 변경과 outbox 저장은 같은 트랜잭션에서 커밋된다.
      *
      * 예외:
      * - 품목 없음: ItemNotFoundException (저장 전 중단)
      * - 이미 활성 상태: InvalidItemStatusException (저장 전 중단)
-     * - Inventory 동기화 실패: InventorySyncFailedException/InventorySyncUnavailableException (롤백)
      */
     @Transactional
+    @CacheEvict(cacheNames = ItemCacheNames.ITEM_DETAIL,
+            key = "T(com.fallguys.itemservice.config.ItemCacheKeys).detail(#sku)")
     public Item activate(String sku) {
         Item item = getBySku(sku);
 
         item.activate(clock.instant());
         Item saved = itemRepository.save(item);
-        inventoryItemSynchronizer.syncActive(saved.getSku(), true);
+        itemSnapshotEventPublisher.publishChanged(saved);
         return saved;
     }
 
@@ -355,22 +365,23 @@ public class ItemService {
      * 1) SKU로 기존 품목을 조회한다.
      * 2) 이미 비활성 상태인지 도메인 모델이 검증한다.
      * 3) Item 도메인 모델의 비활성 상태를 변경하고 저장한다.
-     * 4) Inventory stock 스냅샷의 활성 상태를 동기화한다.
+     * 4) item snapshot 변경 이벤트를 outbox에 저장한다.
      *
-     * 트랜잭션: 쓰기. Inventory 동기화 실패 시 Item 상태 변경도 롤백한다.
+     * 트랜잭션: 쓰기. Item 상태 변경과 outbox 저장은 같은 트랜잭션에서 커밋된다.
      *
      * 예외:
      * - 품목 없음: ItemNotFoundException (저장 전 중단)
      * - 이미 비활성 상태: InvalidItemStatusException (저장 전 중단)
-     * - Inventory 동기화 실패: InventorySyncFailedException/InventorySyncUnavailableException (롤백)
      */
     @Transactional
+    @CacheEvict(cacheNames = ItemCacheNames.ITEM_DETAIL,
+            key = "T(com.fallguys.itemservice.config.ItemCacheKeys).detail(#sku)")
     public Item deactivate(String sku) {
         Item item = getBySku(sku);
 
         item.deactivate(clock.instant());
         Item saved = itemRepository.save(item);
-        inventoryItemSynchronizer.syncActive(saved.getSku(), false);
+        itemSnapshotEventPublisher.publishChanged(saved);
         return saved;
     }
 
@@ -437,35 +448,9 @@ public class ItemService {
                 .orElseThrow(() -> new ItemNotFoundException(sku));
     }
 
-    private void syncInventoryBasicFields(
-            Item item,
-            String previousName,
-            boolean nameChanged,
-            boolean unitChanged
-    ) {
-        boolean nameSynced = false;
-        if (nameChanged) {
-            inventoryItemSynchronizer.syncName(item.getSku(), item.getName());
-            nameSynced = true;
-        }
-        try {
-            if (unitChanged) {
-                inventoryItemSynchronizer.syncUnit(item.getSku(), item.getUnit());
-            }
-        } catch (RuntimeException ex) {
-            compensateNameSync(item.getSku(), previousName, nameSynced, ex);
-            throw ex;
-        }
-    }
-
-    private void compensateNameSync(String sku, String previousName, boolean nameSynced, RuntimeException originalException) {
-        if (!nameSynced) {
-            return;
-        }
-        try {
-            inventoryItemSynchronizer.syncName(sku, previousName);
-        } catch (RuntimeException compensationException) {
-            originalException.addSuppressed(compensationException);
+    private void publishSnapshotChangedIfNeeded(Item item, boolean nameChanged, boolean unitChanged) {
+        if (nameChanged || unitChanged) {
+            itemSnapshotEventPublisher.publishChanged(item);
         }
     }
 
@@ -476,18 +461,10 @@ public class ItemService {
         return value.trim();
     }
 
-    private static class NoopInventoryItemSynchronizer implements InventoryItemSynchronizer {
+    private static class NoopItemSnapshotEventPublisher implements ItemSnapshotEventPublisher {
 
         @Override
-        public void syncName(String sku, String itemName) {
-        }
-
-        @Override
-        public void syncUnit(String sku, ItemUnit itemUnit) {
-        }
-
-        @Override
-        public void syncActive(String sku, boolean active) {
+        public void publishChanged(Item item) {
         }
     }
 }

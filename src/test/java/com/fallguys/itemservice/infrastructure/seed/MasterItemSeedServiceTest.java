@@ -30,14 +30,17 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 })
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 @TestPropertySource(properties = {
-        "spring.datasource.url=jdbc:h2:mem:item_seed_test;MODE=PostgreSQL;DB_CLOSE_DELAY=-1",
+        "spring.datasource.url=jdbc:h2:mem:item_seed_test;MODE=PostgreSQL;INIT=CREATE DOMAIN IF NOT EXISTS JSONB AS JSON;DB_CLOSE_DELAY=-1",
         "spring.datasource.driver-class-name=org.h2.Driver",
         "spring.datasource.username=sa",
         "spring.datasource.password=",
         "spring.jpa.hibernate.ddl-auto=validate",
+        "messaging.outbox.relay.enabled=false",
         "spring.flyway.enabled=true"
 })
 class MasterItemSeedServiceTest {
+
+    private static final int MASTER_ITEM_COUNT = 10_000;
 
     @Autowired
     private MasterItemSeedService seedService;
@@ -56,10 +59,10 @@ class MasterItemSeedServiceTest {
         assertAll(
                 () -> assertEquals(9, result.categoriesCreated()),
                 () -> assertEquals(0, result.categoriesSkipped()),
-                () -> assertEquals(42, result.itemsCreated()),
+                () -> assertEquals(MASTER_ITEM_COUNT, result.itemsCreated()),
                 () -> assertEquals(0, result.itemsSkipped()),
                 () -> assertEquals(9, count("item_categories")),
-                () -> assertEquals(42, count("items")),
+                () -> assertEquals(MASTER_ITEM_COUNT, count("items")),
                 () -> assertEquals("ENGINE_LUBRICATION", itemCategoryCode("ENG-OIL-5W30-1L")),
                 () -> assertEquals("BRAKE", itemCategoryCode("BRK-PAD-FR-001")),
                 () -> assertEquals(false, itemActive("ENG-OIL-15W40-4L"))
@@ -85,8 +88,8 @@ class MasterItemSeedServiceTest {
                 () -> assertEquals(0, second.categoriesCreated()),
                 () -> assertEquals(9, second.categoriesSkipped()),
                 () -> assertEquals(0, second.itemsCreated()),
-                () -> assertEquals(42, second.itemsSkipped()),
-                () -> assertEquals(42, count("items")),
+                () -> assertEquals(MASTER_ITEM_COUNT, second.itemsSkipped()),
+                () -> assertEquals(MASTER_ITEM_COUNT, count("items")),
                 () -> assertEquals("수동 수정된 엔진오일", itemName("ENG-OIL-5W30-1L")),
                 () -> assertEquals(1, itemUnitPrice("ENG-OIL-5W30-1L"))
         );
