@@ -14,8 +14,11 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.cache.RedisCacheConfiguration;
 import org.springframework.data.redis.cache.RedisCacheManager;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
-import org.springframework.data.redis.serializer.GenericJacksonJsonRedisSerializer;
+import org.springframework.data.redis.serializer.JacksonJsonRedisSerializer;
 import org.springframework.data.redis.serializer.RedisSerializationContext.SerializationPair;
+import org.springframework.data.redis.serializer.RedisSerializer;
+
+import com.fallguys.itemservice.domain.ItemView;
 
 @Configuration
 @EnableCaching
@@ -28,7 +31,7 @@ public class CacheConfig implements CachingConfigurer {
                 .entryTtl(itemDetailTtl)
                 .disableCachingNullValues()
                 .disableKeyPrefix()
-                .serializeValuesWith(SerializationPair.fromSerializer(GenericJacksonJsonRedisSerializer.builder().build()));
+                .serializeValuesWith(SerializationPair.fromSerializer(itemDetailValueSerializer()));
 
         return RedisCacheManager.builder(redisConnectionFactory)
                 .cacheDefaults(itemDetailConfig)
@@ -40,5 +43,9 @@ public class CacheConfig implements CachingConfigurer {
     @Override
     public CacheErrorHandler errorHandler() {
         return new LoggingCacheErrorHandler(false);
+    }
+
+    static RedisSerializer<ItemView> itemDetailValueSerializer() {
+        return new JacksonJsonRedisSerializer<>(ItemView.class);
     }
 }
