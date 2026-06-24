@@ -28,6 +28,11 @@ spring:
     password: ${SPRING_RABBITMQ_PASSWORD:guest}
     publisher-confirm-type: correlated
     publisher-returns: true
+  data:
+    redis:
+      host: ${SPRING_DATA_REDIS_HOST:${SPRING_REDIS_HOST:${REDIS_HOST:localhost}}}
+      port: ${SPRING_DATA_REDIS_PORT:${SPRING_REDIS_PORT:${REDIS_PORT:6379}}}
+      password: ${SPRING_DATA_REDIS_PASSWORD:${SPRING_REDIS_PASSWORD:${REDIS_PASSWORD:}}}
 
 springdoc:
   paths-to-match: /items/**
@@ -45,6 +50,9 @@ item:
   master-seed:
     enabled: ${ITEM_MASTER_SEED_ENABLED:true}
     location: ${ITEM_MASTER_SEED_LOCATION:classpath:data/items.csv}
+  cache:
+    detail:
+      ttl: ${ITEM_DETAIL_CACHE_TTL:20m}
 
 messaging:
   outbox:

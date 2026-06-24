@@ -29,7 +29,7 @@ public class Item {
             Instant createdAt,
             Instant updatedAt
     ) {
-        this.sku = requireText(sku, "sku");
+        this.sku = requireSku(sku);
         this.name = requireText(name, "name");
         this.categoryCode = requireText(categoryCode, "categoryCode");
         this.unit = requireUnit(unit);
@@ -150,6 +150,17 @@ public class Item {
             throw new InvalidItemException("필수값이 누락되었습니다: " + fieldName);
         }
         return value.trim();
+    }
+
+    private static String requireSku(String value) {
+        String normalizedSku = ItemSkuPolicy.normalize(value);
+        if (normalizedSku == null) {
+            throw new InvalidItemException("필수값이 누락되었습니다: sku");
+        }
+        if (!ItemSkuPolicy.isValid(normalizedSku)) {
+            throw new InvalidItemException("SKU 형식이 올바르지 않습니다: " + normalizedSku);
+        }
+        return normalizedSku;
     }
 
     private static ItemUnit requireUnit(ItemUnit unit) {

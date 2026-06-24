@@ -18,4 +18,10 @@ public interface ItemRepository {
     PageResult<ItemView> searchViews(SearchItemViewsQuery query);
 
     Item save(Item item);
+
+    default List<Item> saveAll(List<Item> items) {
+        return items.stream()
+                .map(this::save)
+                .toList();
+    }
 }

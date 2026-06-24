@@ -1,5 +1,6 @@
 package com.fallguys.itemservice.infrastructure.seed;
 
+import com.fallguys.itemservice.domain.Item;
 import com.fallguys.itemservice.domain.ItemCategoryRepository;
 import com.fallguys.itemservice.domain.ItemRepository;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -11,11 +12,16 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.time.Clock;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 
 @Service
 public class MasterItemSeedService {
+
+    private static final int EXISTING_SKU_LOOKUP_BATCH_SIZE = 500;
 
     private final ItemCategoryRepository itemCategoryRepository;
     private final ItemRepository itemRepository;
@@ -56,18 +62,19 @@ public class MasterItemSeedService {
         }
 
         Instant now = clock.instant();
-        int itemsCreated = 0;
+        Set<String> existingSkus = findExistingSkus(rows);
+        List<Item> newItems = new ArrayList<>();
         int itemsSkipped = 0;
         for (MasterItemCsvRow row : rows) {
-            if (itemRepository.existsBySku(row.sku())) {
+            if (existingSkus.contains(row.sku())) {
                 itemsSkipped++;
                 continue;
             }
-            itemRepository.save(row.toItem(now));
-            itemsCreated++;
+            newItems.add(row.toItem(now));
         }
+        itemRepository.saveAll(newItems);
 
-        return new MasterItemSeedResult(categoriesCreated, categoriesSkipped, itemsCreated, itemsSkipped);
+        return new MasterItemSeedResult(categoriesCreated, categoriesSkipped, newItems.size(), itemsSkipped);
     }
 
     private List<MasterItemCsvRow> readRows(Resource resource) {
@@ -86,5 +93,19 @@ public class MasterItemSeedService {
             throw new MasterItemSeedException("부품 마스터 시드 CSV 리소스가 존재하지 않습니다: " + resource.getDescription());
         }
         return resource;
+    }
+
+    private Set<String> findExistingSkus(List<MasterItemCsvRow> rows) {
+        Set<String> existingSkus = new HashSet<>();
+        for (int start = 0; start < rows.size(); start += EXISTING_SKU_LOOKUP_BATCH_SIZE) {
+            int end = Math.min(start + EXISTING_SKU_LOOKUP_BATCH_SIZE, rows.size());
+            List<String> skuBatch = rows.subList(start, end).stream()
+                    .map(MasterItemCsvRow::sku)
+                    .toList();
+            itemRepository.findBySkus(skuBatch).stream()
+                    .map(Item::getSku)
+                    .forEach(existingSkus::add);
+        }
+        return existingSkus;
     }
 }

@@ -91,6 +91,16 @@ class MasterItemCsvParserTest {
         assertEquals("CSV에 중복된 SKU가 있습니다. 행=2, sku=DUP-001", exception.getMessage());
     }
 
+    @Test
+    void failsWhenSkuFormatIsInvalid() {
+        MasterItemSeedException exception = assertThrows(MasterItemSeedException.class, () -> parser.parse(csv("""
+                sku,name,category,unit,safety_stock,unit_price,active
+                invalid.sku,Invalid item,제동,EA,1,1000,true
+                """), "test.csv"));
+
+        assertEquals("CSV SKU 형식이 올바르지 않습니다. 행=1, sku=invalid.sku", exception.getMessage());
+    }
+
     private static ByteArrayInputStream csv(String value) {
         return new ByteArrayInputStream(value.getBytes(StandardCharsets.UTF_8));
     }
