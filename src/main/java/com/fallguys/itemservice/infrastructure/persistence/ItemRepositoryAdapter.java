@@ -143,6 +143,19 @@ public class ItemRepositoryAdapter implements ItemRepository {
         return jpaDao.save(entity).toDomain();
     }
 
+    @Override
+    public List<Item> saveAll(List<Item> items) {
+        if (items.isEmpty()) {
+            return List.of();
+        }
+        List<ItemEntity> entities = items.stream()
+                .map(ItemEntity::from)
+                .toList();
+        return jpaDao.saveAll(entities).stream()
+                .map(ItemEntity::toDomain)
+                .toList();
+    }
+
     private static Specification<ItemEntity> toSpecification(SearchItemsQuery query) {
         return (root, criteriaQuery, criteriaBuilder) -> {
             List<Predicate> predicates = new ArrayList<>();

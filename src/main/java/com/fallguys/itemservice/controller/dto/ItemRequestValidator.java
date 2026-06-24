@@ -1,5 +1,6 @@
 package com.fallguys.itemservice.controller.dto;
 
+import com.fallguys.itemservice.domain.ItemSkuPolicy;
 import com.fallguys.itemservice.domain.ItemUnit;
 import com.fallguys.itemservice.domain.exception.InvalidItemRequestException;
 import com.fallguys.itemservice.domain.exception.ItemErrorCode;
@@ -10,18 +11,17 @@ import java.util.regex.Pattern;
 
 public final class ItemRequestValidator {
 
-    private static final Pattern SKU_PATTERN = Pattern.compile("^[A-Z0-9][A-Z0-9_-]{0,63}$");
     private static final Pattern CATEGORY_CODE_PATTERN = Pattern.compile("^[A-Z0-9][A-Z0-9_]{0,63}$");
 
     private ItemRequestValidator() {
     }
 
     public static String requireSku(String sku, ItemErrorCode missingCode) {
-        String normalizedSku = trimToNull(sku);
+        String normalizedSku = ItemSkuPolicy.normalize(sku);
         if (normalizedSku == null) {
             throw new InvalidItemRequestException(missingCode, "SKU는 필수입니다.");
         }
-        if (!SKU_PATTERN.matcher(normalizedSku).matches()) {
+        if (!ItemSkuPolicy.isValid(normalizedSku)) {
             throw new InvalidItemRequestException(ItemErrorCode.INVALID_SKU_FORMAT, "SKU 형식이 올바르지 않습니다: " + normalizedSku);
         }
         return normalizedSku;

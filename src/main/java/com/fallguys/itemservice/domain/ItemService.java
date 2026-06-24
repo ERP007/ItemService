@@ -1,5 +1,6 @@
 package com.fallguys.itemservice.domain;
 
+import com.fallguys.itemservice.config.ItemCacheNames;
 import com.fallguys.itemservice.domain.exception.DuplicateItemSkuException;
 import com.fallguys.itemservice.domain.exception.InvalidItemException;
 import com.fallguys.itemservice.domain.exception.InactiveItemCannotBeModifiedException;
@@ -9,6 +10,9 @@ import com.fallguys.itemservice.domain.exception.CategoryNotFoundException;
 import com.fallguys.itemservice.domain.exception.InvalidItemRequestException;
 import com.fallguys.itemservice.domain.exception.ItemErrorCode;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.CachePut;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -154,6 +158,9 @@ public class ItemService {
      * - 품목 없음: ItemNotFoundException (롤백 대상 변경 없음)
      */
     @Transactional(readOnly = true)
+    @Cacheable(cacheNames = ItemCacheNames.ITEM_DETAIL,
+            key = "T(com.fallguys.itemservice.config.ItemCacheKeys).detail(#sku)",
+            unless = "#result == null")
     public ItemView getViewBySku(String sku) {
         String normalizedSku = requireText(sku, "sku");
 
@@ -229,6 +236,9 @@ public class ItemService {
      * - create(command)의 예외와 동일하다.
      */
     @Transactional
+    @CachePut(cacheNames = ItemCacheNames.ITEM_DETAIL,
+            key = "T(com.fallguys.itemservice.config.ItemCacheKeys).detail(#result.sku())",
+            unless = "#result == null")
     public ItemView createView(CreateItemCommand command) {
         Item item = create(command);
 
@@ -252,6 +262,8 @@ public class ItemService {
      * - 품목 불변식 위반: InvalidItemException (저장 전 중단)
      */
     @Transactional
+    @CacheEvict(cacheNames = ItemCacheNames.ITEM_DETAIL,
+            key = "T(com.fallguys.itemservice.config.ItemCacheKeys).detail(#command == null ? null : #command.sku())")
     public Item update(UpdateItemCommand command) {
         UpdateItemCommand validatedCommand = Objects.requireNonNull(command, "command");
         Item item = getBySku(validatedCommand.sku());
@@ -290,6 +302,9 @@ public class ItemService {
      * - 잘못된 대분류/중분류: InvalidItemRequestException (저장 전 중단)
      */
     @Transactional
+    @CachePut(cacheNames = ItemCacheNames.ITEM_DETAIL,
+            key = "T(com.fallguys.itemservice.config.ItemCacheKeys).detail(#result.sku())",
+            unless = "#result == null")
     public ItemView updateSelection(UpdateItemSelectionCommand command) {
         UpdateItemSelectionCommand validatedCommand = Objects.requireNonNull(command, "command");
         Item item = getBySku(validatedCommand.sku());
@@ -332,6 +347,8 @@ public class ItemService {
      * - 이미 활성 상태: InvalidItemStatusException (저장 전 중단)
      */
     @Transactional
+    @CacheEvict(cacheNames = ItemCacheNames.ITEM_DETAIL,
+            key = "T(com.fallguys.itemservice.config.ItemCacheKeys).detail(#sku)")
     public Item activate(String sku) {
         Item item = getBySku(sku);
 
@@ -357,6 +374,8 @@ public class ItemService {
      * - 이미 비활성 상태: InvalidItemStatusException (저장 전 중단)
      */
     @Transactional
+    @CacheEvict(cacheNames = ItemCacheNames.ITEM_DETAIL,
+            key = "T(com.fallguys.itemservice.config.ItemCacheKeys).detail(#sku)")
     public Item deactivate(String sku) {
         Item item = getBySku(sku);
 
