@@ -37,6 +37,7 @@ import java.util.List;
 
 import static org.hamcrest.Matchers.nullValue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -54,6 +55,7 @@ class ItemControllerTest {
 
     private static final Instant CREATED_AT = Instant.parse("2026-06-06T10:30:00Z");
     private static final Instant UPDATED_AT = Instant.parse("2026-06-07T10:30:00Z");
+    private static final String EMPLOYEE_NO = "ADMIN002";
     private static final String VALID_CREATE_JSON = """
             {
               "sku": "HMC-EN-00214",
@@ -90,12 +92,20 @@ class ItemControllerTest {
 
     private static RequestPostProcessor roleJwt(String role) {
         return jwt()
-                .jwt(jwt -> jwt.claim("user_role", role))
+                .jwt(jwt -> jwt
+                        .claim("user_role", role)
+                        .claim("employee_no", EMPLOYEE_NO))
                 .authorities(new JwtRoleConverter());
     }
 
     private static RequestPostProcessor jwtWithoutRole() {
         return jwt().authorities(new JwtRoleConverter());
+    }
+
+    private static RequestPostProcessor jwtWithoutEmployeeNo() {
+        return jwt()
+                .jwt(jwt -> jwt.claim("user_role", "ADMIN"))
+                .authorities(new JwtRoleConverter());
     }
 
     private static MockHttpServletRequestBuilder createItemRequest() {
@@ -140,10 +150,10 @@ class ItemControllerTest {
 
     @Test
     void allowsWriteApisForAdminAndHeadOfficeRoles() throws Exception {
-        when(itemService.createView(any(CreateItemCommand.class))).thenReturn(itemView());
-        when(itemService.updateSelection(any(UpdateItemSelectionCommand.class))).thenReturn(itemView());
-        when(itemService.activate(eq("HMC-WP-00229"))).thenReturn(statusItem(true));
-        when(itemService.deactivate(eq("HMC-WP-00229"))).thenReturn(statusItem(false));
+        when(itemService.createView(any(CreateItemCommand.class), anyString())).thenReturn(itemView());
+        when(itemService.updateSelection(any(UpdateItemSelectionCommand.class), anyString())).thenReturn(itemView());
+        when(itemService.activate(eq("HMC-WP-00229"), anyString())).thenReturn(statusItem(true));
+        when(itemService.deactivate(eq("HMC-WP-00229"), anyString())).thenReturn(statusItem(false));
         when(itemService.isSkuAvailable(eq("HMC-EN-00214"))).thenReturn(true);
         when(itemService.getBySkus(eq(List.of("HMC-EN-00214", "HMC-NO-99999"))))
                 .thenReturn(List.of(internalItem()));
@@ -246,6 +256,22 @@ class ItemControllerTest {
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.detail").value("인증이 필요합니다."))
                 .andExpect(jsonPath("$.errorCode").doesNotExist());
+    }
+
+    @Test
+    void rejectsActivityProducingWriteApisWhenEmployeeNoClaimIsMissing() throws Exception {
+        mockMvc.perform(createItemRequest().with(jwtWithoutEmployeeNo()))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.detail").value("접근 권한이 없습니다."));
+        mockMvc.perform(updateItemRequest().with(jwtWithoutEmployeeNo()))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.detail").value("접근 권한이 없습니다."));
+        mockMvc.perform(activateItemRequest().with(jwtWithoutEmployeeNo()))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.detail").value("접근 권한이 없습니다."));
+        mockMvc.perform(deactivateItemRequest().with(jwtWithoutEmployeeNo()))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.detail").value("접근 권한이 없습니다."));
     }
 
     @Test
@@ -709,7 +735,7 @@ class ItemControllerTest {
 
     @Test
     void createsItem() throws Exception {
-        when(itemService.createView(any(CreateItemCommand.class))).thenReturn(itemView());
+        when(itemService.createView(any(CreateItemCommand.class), anyString())).thenReturn(itemView());
 
         mockMvc.perform(post("/items")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -733,7 +759,7 @@ class ItemControllerTest {
 
     @Test
     void createsItemWithRootCategoryAsMajorCategory() throws Exception {
-        when(itemService.createView(any(CreateItemCommand.class))).thenReturn(drivetrainRootItemView());
+        when(itemService.createView(any(CreateItemCommand.class), anyString())).thenReturn(drivetrainRootItemView());
 
         mockMvc.perform(post("/items")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -773,7 +799,7 @@ class ItemControllerTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.errorCode").value("ITM-004"));
 
-        when(itemService.createView(any(CreateItemCommand.class)))
+        when(itemService.createView(any(CreateItemCommand.class), anyString()))
                 .thenThrow(new DuplicateItemSkuException("HMC-EN-00214"));
 
         mockMvc.perform(post("/items")
@@ -795,7 +821,7 @@ class ItemControllerTest {
 
     @Test
     void updatesItem() throws Exception {
-        when(itemService.updateSelection(any(UpdateItemSelectionCommand.class))).thenReturn(itemView());
+        when(itemService.updateSelection(any(UpdateItemSelectionCommand.class), anyString())).thenReturn(itemView());
 
         mockMvc.perform(patch("/items/{sku}", "HMC-EN-00214")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -817,7 +843,7 @@ class ItemControllerTest {
 
     @Test
     void updatesItemWithRootCategoryAndOptionalSubCategory() throws Exception {
-        when(itemService.updateSelection(any(UpdateItemSelectionCommand.class))).thenReturn(drivetrainRootItemView());
+        when(itemService.updateSelection(any(UpdateItemSelectionCommand.class), anyString())).thenReturn(drivetrainRootItemView());
 
         mockMvc.perform(patch("/items/{sku}", "HMC-DR-00001")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -855,7 +881,7 @@ class ItemControllerTest {
                 .andExpect(jsonPath("$.subCategoryCode").value(nullValue()));
 
         ArgumentCaptor<UpdateItemSelectionCommand> captor = ArgumentCaptor.forClass(UpdateItemSelectionCommand.class);
-        verify(itemService, times(2)).updateSelection(captor.capture());
+        verify(itemService, times(2)).updateSelection(captor.capture(), eq(EMPLOYEE_NO));
         org.junit.jupiter.api.Assertions.assertAll(
                 () -> org.junit.jupiter.api.Assertions.assertNull(captor.getAllValues().get(0).subCategoryCode()),
                 () -> org.junit.jupiter.api.Assertions.assertNull(captor.getAllValues().get(1).subCategoryCode())
@@ -864,7 +890,7 @@ class ItemControllerTest {
 
     @Test
     void failsWhenInactiveItemIsModified() throws Exception {
-        when(itemService.updateSelection(any(UpdateItemSelectionCommand.class)))
+        when(itemService.updateSelection(any(UpdateItemSelectionCommand.class), anyString()))
                 .thenThrow(new InactiveItemCannotBeModifiedException("HMC-EN-00214"));
 
         mockMvc.perform(patch("/items/{sku}", "HMC-EN-00214")
@@ -886,7 +912,7 @@ class ItemControllerTest {
 
     @Test
     void activatesItem() throws Exception {
-        when(itemService.activate(eq("HMC-WP-00229"))).thenReturn(statusItem(true));
+        when(itemService.activate(eq("HMC-WP-00229"), anyString())).thenReturn(statusItem(true));
 
         mockMvc.perform(patch("/items/{sku}/activate", "HMC-WP-00229").with(adminJwt()))
                 .andExpect(status().isOk())
@@ -895,12 +921,12 @@ class ItemControllerTest {
                 .andExpect(jsonPath("$.active").value(true))
                 .andExpect(jsonPath("$.updatedAt").value("2026-06-07T10:30"));
 
-        verify(itemService).activate("HMC-WP-00229");
+        verify(itemService).activate("HMC-WP-00229", EMPLOYEE_NO);
     }
 
     @Test
     void deactivatesItem() throws Exception {
-        when(itemService.deactivate(eq("HMC-WP-00229"))).thenReturn(statusItem(false));
+        when(itemService.deactivate(eq("HMC-WP-00229"), anyString())).thenReturn(statusItem(false));
 
         mockMvc.perform(patch("/items/{sku}/deactivate", "HMC-WP-00229").with(adminJwt()))
                 .andExpect(status().isOk())
@@ -908,7 +934,7 @@ class ItemControllerTest {
                 .andExpect(jsonPath("$.active").value(false))
                 .andExpect(jsonPath("$.updatedAt").value("2026-06-07T10:30"));
 
-        verify(itemService).deactivate("HMC-WP-00229");
+        verify(itemService).deactivate("HMC-WP-00229", EMPLOYEE_NO);
     }
 
     @Test
@@ -920,7 +946,7 @@ class ItemControllerTest {
 
     @Test
     void failsWhenItemStatusIsAlreadyApplied() throws Exception {
-        when(itemService.activate(eq("HMC-WP-00229")))
+        when(itemService.activate(eq("HMC-WP-00229"), anyString()))
                 .thenThrow(InvalidItemStatusException.alreadyActive("HMC-WP-00229"));
 
         mockMvc.perform(patch("/items/{sku}/activate", "HMC-WP-00229").with(adminJwt()))
@@ -930,7 +956,7 @@ class ItemControllerTest {
 
     @Test
     void mapsConcurrentStatusChangeToConflict() throws Exception {
-        when(itemService.deactivate(eq("HMC-WP-00229")))
+        when(itemService.deactivate(eq("HMC-WP-00229"), anyString()))
                 .thenThrow(new ObjectOptimisticLockingFailureException(Item.class, "HMC-WP-00229"));
 
         mockMvc.perform(patch("/items/{sku}/deactivate", "HMC-WP-00229").with(adminJwt()))
@@ -1012,8 +1038,8 @@ class ItemControllerTest {
                 .thenReturn(List.of(ItemCategory.root("ENGINE", "엔진", 1, true)));
         when(itemCategoryService.findSubCategories(eq("ENGINE")))
                 .thenReturn(List.of(ItemCategory.subCategory("ENGINE_LUBRICATION", "윤활계통", "ENGINE", 1, true)));
-        when(itemService.activate(eq("HMC-WP-00229"))).thenReturn(statusItem(true));
-        when(itemService.deactivate(eq("HMC-WP-00229"))).thenReturn(statusItem(false));
+        when(itemService.activate(eq("HMC-WP-00229"), anyString())).thenReturn(statusItem(true));
+        when(itemService.deactivate(eq("HMC-WP-00229"), anyString())).thenReturn(statusItem(false));
         when(itemService.getViewBySku(eq("HMC-EN-00214"))).thenReturn(itemView());
         when(itemService.getUnits()).thenReturn(List.of(ItemUnit.EA, ItemUnit.BOX, ItemUnit.SET, ItemUnit.L));
         when(itemService.getBySkus(eq(List.of("HMC-EN-00214", "HMC-NO-99999"))))

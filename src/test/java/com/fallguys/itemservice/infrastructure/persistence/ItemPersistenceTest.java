@@ -172,6 +172,31 @@ class ItemPersistenceTest {
     }
 
     @Test
+    void handlesEmptyBatchItemRepositoryCalls() {
+        assertAll(
+                () -> assertTrue(itemRepository.findBySkus(List.of()).isEmpty()),
+                () -> assertTrue(itemRepository.saveAll(List.of()).isEmpty())
+        );
+    }
+
+    @Test
+    void savesAllItemsInBatch() {
+        saveCategory(ItemCategory.root("ENGINE", "Engine", 1, true));
+        saveCategory(ItemCategory.subCategory("ENGINE_OIL", "Engine oil", "ENGINE", 1, true));
+
+        List<Item> saved = itemRepository.saveAll(List.of(
+                item("BATCH-OIL-A", "Alpha oil", "ENGINE_OIL", ItemUnit.EA, 50, 1000, true),
+                item("BATCH-OIL-B", "Bravo oil", "ENGINE_OIL", ItemUnit.EA, 30, 3000, true)
+        ));
+
+        assertAll(
+                () -> assertEquals(2, saved.size()),
+                () -> assertTrue(itemRepository.existsBySku("BATCH-OIL-A")),
+                () -> assertTrue(itemRepository.existsBySku("BATCH-OIL-B"))
+        );
+    }
+
+    @Test
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
     void detectsOptimisticLockingConflict() {
         saveCategory(ItemCategory.root("ENGINE", "Engine", 1, true));
@@ -238,6 +263,59 @@ class ItemPersistenceTest {
     }
 
     @Test
+    void searchesItemsWithoutFiltersAndCoversSortVariants() {
+        saveCategory(ItemCategory.root("ENGINE", "Engine", 1, true));
+        saveCategory(ItemCategory.subCategory("ENGINE_OIL", "Engine oil", "ENGINE", 1, true));
+        itemRepository.save(item("ENG-OIL-5W30-1L", "Alpha oil", "ENGINE_OIL", ItemUnit.EA, 50, 1000, true));
+        itemRepository.save(item("ENG-OIL-0W20-4L", "Bravo oil", "ENGINE_OIL", ItemUnit.EA, 30, 3000, false));
+
+        PageResult<Item> sortedBySku = itemRepository.search(new SearchItemsQuery(
+                null,
+                null,
+                null,
+                0,
+                10,
+                ItemSortBy.SKU,
+                SortDirection.ASC
+        ));
+        PageResult<Item> sortedByName = itemRepository.search(new SearchItemsQuery(
+                null,
+                null,
+                null,
+                0,
+                10,
+                ItemSortBy.NAME,
+                SortDirection.DESC
+        ));
+        PageResult<Item> sortedByCreatedAt = itemRepository.search(new SearchItemsQuery(
+                null,
+                null,
+                null,
+                0,
+                10,
+                ItemSortBy.CREATED_AT,
+                SortDirection.ASC
+        ));
+        PageResult<Item> sortedByUpdatedAt = itemRepository.search(new SearchItemsQuery(
+                null,
+                null,
+                null,
+                0,
+                10,
+                ItemSortBy.UPDATED_AT,
+                SortDirection.DESC
+        ));
+
+        assertAll(
+                () -> assertEquals(2, sortedBySku.totalElements()),
+                () -> assertEquals("ENG-OIL-0W20-4L", sortedBySku.content().getFirst().getSku()),
+                () -> assertEquals("Bravo oil", sortedByName.content().getFirst().getName()),
+                () -> assertEquals(2, sortedByCreatedAt.content().size()),
+                () -> assertEquals(2, sortedByUpdatedAt.content().size())
+        );
+    }
+
+    @Test
     void searchesItemViewsWithCategoryNames() {
         saveCategory(ItemCategory.root("ENGINE", "엔진", 1, true));
         saveCategory(ItemCategory.subCategory("ENGINE_OIL", "윤활계통", "ENGINE", 1, true));
@@ -284,6 +362,26 @@ class ItemPersistenceTest {
     }
 
     @Test
+    void searchesItemViewsWithoutFilters() {
+        saveCategory(ItemCategory.root("ENGINE", "엔진", 1, true));
+        saveCategory(ItemCategory.subCategory("ENGINE_OIL", "윤활계통", "ENGINE", 1, true));
+        itemRepository.save(item("ENG-OIL-5W30-1L", "Alpha oil", "ENGINE_OIL", ItemUnit.EA, 50, 1000, true));
+        itemRepository.save(item("ENG-OIL-0W20-4L", "Bravo oil", "ENGINE_OIL", ItemUnit.EA, 30, 3000, false));
+
+        PageResult<ItemView> found = itemRepository.searchViews(new SearchItemViewsQuery(
+                null,
+                List.of(),
+                null,
+                0,
+                10,
+                ItemSortBy.UPDATED_AT,
+                SortDirection.DESC
+        ));
+
+        assertEquals(2, found.totalElements());
+    }
+
+    @Test
     void findsActiveCategories() {
         saveCategory(ItemCategory.root("ENGINE", "Engine", 2, true));
         saveCategory(ItemCategory.root("BRAKE", "Brake", 1, false));
@@ -301,6 +399,45 @@ class ItemPersistenceTest {
                 () -> assertTrue(itemCategoryRepository.existsActiveByCode("ENGINE_OIL")),
                 () -> assertFalse(itemCategoryRepository.existsActiveByCode("ENGINE_FILTER")),
                 () -> assertFalse(itemCategoryRepository.existsActiveByCode("UNKNOWN"))
+        );
+    }
+
+    @Test
+    void categoryRepositoryNormalizesCodesAndUpdatesExistingCategory() {
+        ItemCategory savedEngine = itemCategoryRepository.save(ItemCategory.root("ENGINE", "Engine", 1, true));
+        itemCategoryRepository.save(ItemCategory.subCategory("ENGINE_OIL", "Engine oil", "ENGINE", 1, true));
+        itemCategoryRepository.save(ItemCategory.subCategory("ENGINE_FILTER", "Engine filter", "ENGINE", 2, false));
+        itemCategoryRepository.save(ItemCategory.root("BRAKE", "Brake", 2, true));
+
+        ItemCategory updatedEngine = itemCategoryRepository.save(ItemCategory.root("ENGINE", "Engine parts", 3, false));
+
+        assertAll(
+                () -> assertEquals("ENGINE", savedEngine.getCode()),
+                () -> assertEquals("Engine parts", updatedEngine.getName()),
+                () -> assertFalse(updatedEngine.isActive()),
+                () -> assertTrue(itemCategoryRepository.findByCode(" ENGINE ").isPresent()),
+                () -> assertTrue(itemCategoryRepository.findByCode(" ").isEmpty()),
+                () -> assertTrue(itemCategoryRepository.findByCode(null).isEmpty()),
+                () -> assertTrue(itemCategoryRepository.findActiveByCode("BRAKE").isPresent()),
+                () -> assertTrue(itemCategoryRepository.findActiveByCode(" ").isEmpty()),
+                () -> assertTrue(itemCategoryRepository.findActiveByCode(null).isEmpty()),
+                () -> assertEquals(1, itemCategoryRepository.findSubCategories(" ENGINE ").size()),
+                () -> assertTrue(itemCategoryRepository.findSubCategories(" ").isEmpty()),
+                () -> assertTrue(itemCategoryRepository.findSubCategories(null).isEmpty()),
+                () -> assertTrue(itemCategoryRepository.existsActiveByCode("BRAKE")),
+                () -> assertFalse(itemCategoryRepository.existsActiveByCode("ENGINE")),
+                () -> assertFalse(itemCategoryRepository.existsActiveByCode(" ")),
+                () -> assertFalse(itemCategoryRepository.existsActiveByCode(null)),
+                () -> assertTrue(itemCategoryRepository.existsActiveRootByCode("BRAKE")),
+                () -> assertFalse(itemCategoryRepository.existsActiveRootByCode("ENGINE")),
+                () -> assertFalse(itemCategoryRepository.existsActiveRootByCode(" ")),
+                () -> assertFalse(itemCategoryRepository.existsActiveRootByCode(null)),
+                () -> assertTrue(itemCategoryRepository.existsActiveSubCategoryOf("ENGINE", "ENGINE_OIL")),
+                () -> assertFalse(itemCategoryRepository.existsActiveSubCategoryOf("ENGINE", "ENGINE_FILTER")),
+                () -> assertFalse(itemCategoryRepository.existsActiveSubCategoryOf(" ", "ENGINE_OIL")),
+                () -> assertFalse(itemCategoryRepository.existsActiveSubCategoryOf(null, "ENGINE_OIL")),
+                () -> assertFalse(itemCategoryRepository.existsActiveSubCategoryOf("ENGINE", " ")),
+                () -> assertFalse(itemCategoryRepository.existsActiveSubCategoryOf("ENGINE", null))
         );
     }
 
