@@ -24,22 +24,34 @@ import java.util.Objects;
 @Service
 public class ItemService {
 
+    private static final String SYSTEM_EMPLOYEE_NO = "SYSTEM";
+    private static final String ACTIVE_STATUS = "활성";
+    private static final String INACTIVE_STATUS = "비활성";
+
     private final ItemRepository itemRepository;
     private final ItemCategoryRepository itemCategoryRepository;
     private final ItemSnapshotEventPublisher itemSnapshotEventPublisher;
+    private final UserActivityEventPublisher userActivityEventPublisher;
     private final Clock clock;
 
     @Autowired
     public ItemService(
             ItemRepository itemRepository,
             ItemCategoryRepository itemCategoryRepository,
-            ItemSnapshotEventPublisher itemSnapshotEventPublisher
+            ItemSnapshotEventPublisher itemSnapshotEventPublisher,
+            UserActivityEventPublisher userActivityEventPublisher
     ) {
-        this(itemRepository, itemCategoryRepository, itemSnapshotEventPublisher, Clock.systemUTC());
+        this(itemRepository, itemCategoryRepository, itemSnapshotEventPublisher, userActivityEventPublisher, Clock.systemUTC());
     }
 
     ItemService(ItemRepository itemRepository, ItemCategoryRepository itemCategoryRepository, Clock clock) {
-        this(itemRepository, itemCategoryRepository, new NoopItemSnapshotEventPublisher(), clock);
+        this(
+                itemRepository,
+                itemCategoryRepository,
+                new NoopItemSnapshotEventPublisher(),
+                new NoopUserActivityEventPublisher(),
+                clock
+        );
     }
 
     ItemService(
@@ -48,9 +60,26 @@ public class ItemService {
             ItemSnapshotEventPublisher itemSnapshotEventPublisher,
             Clock clock
     ) {
+        this(
+                itemRepository,
+                itemCategoryRepository,
+                itemSnapshotEventPublisher,
+                new NoopUserActivityEventPublisher(),
+                clock
+        );
+    }
+
+    ItemService(
+            ItemRepository itemRepository,
+            ItemCategoryRepository itemCategoryRepository,
+            ItemSnapshotEventPublisher itemSnapshotEventPublisher,
+            UserActivityEventPublisher userActivityEventPublisher,
+            Clock clock
+    ) {
         this.itemRepository = Objects.requireNonNull(itemRepository, "itemRepository");
         this.itemCategoryRepository = Objects.requireNonNull(itemCategoryRepository, "itemCategoryRepository");
         this.itemSnapshotEventPublisher = Objects.requireNonNull(itemSnapshotEventPublisher, "itemSnapshotEventPublisher");
+        this.userActivityEventPublisher = Objects.requireNonNull(userActivityEventPublisher, "userActivityEventPublisher");
         this.clock = Objects.requireNonNull(clock, "clock");
     }
 
@@ -203,6 +232,15 @@ public class ItemService {
      */
     @Transactional
     public Item create(CreateItemCommand command) {
+        return createItem(command, SYSTEM_EMPLOYEE_NO);
+    }
+
+    @Transactional
+    public Item create(CreateItemCommand command, String employeeNo) {
+        return createItem(command, employeeNo);
+    }
+
+    private Item createItem(CreateItemCommand command, String employeeNo) {
         CreateItemCommand validatedCommand = Objects.requireNonNull(command, "command");
 
         if (itemRepository.existsBySku(validatedCommand.sku())) {
@@ -220,7 +258,9 @@ public class ItemService {
                 validatedCommand.unitPrice(),
                 now
         );
-        return itemRepository.save(item);
+        Item saved = itemRepository.save(item);
+        userActivityEventPublisher.publish(saved, UserActivityAction.ITEM_CREATED, employeeNo, null);
+        return saved;
     }
 
     /**
@@ -240,7 +280,15 @@ public class ItemService {
             key = "T(com.fallguys.itemservice.config.ItemCacheKeys).detail(#result.sku())",
             unless = "#result == null")
     public ItemView createView(CreateItemCommand command) {
-        Item item = create(command);
+        return createView(command, SYSTEM_EMPLOYEE_NO);
+    }
+
+    @Transactional
+    @CachePut(cacheNames = ItemCacheNames.ITEM_DETAIL,
+            key = "T(com.fallguys.itemservice.config.ItemCacheKeys).detail(#result.sku())",
+            unless = "#result == null")
+    public ItemView createView(CreateItemCommand command, String employeeNo) {
+        Item item = createItem(command, employeeNo);
 
         return findViewBySku(item.getSku());
     }
@@ -265,6 +313,17 @@ public class ItemService {
     @CacheEvict(cacheNames = ItemCacheNames.ITEM_DETAIL,
             key = "T(com.fallguys.itemservice.config.ItemCacheKeys).detail(#command == null ? null : #command.sku())")
     public Item update(UpdateItemCommand command) {
+        return updateItem(command, SYSTEM_EMPLOYEE_NO);
+    }
+
+    @Transactional
+    @CacheEvict(cacheNames = ItemCacheNames.ITEM_DETAIL,
+            key = "T(com.fallguys.itemservice.config.ItemCacheKeys).detail(#command == null ? null : #command.sku())")
+    public Item update(UpdateItemCommand command, String employeeNo) {
+        return updateItem(command, employeeNo);
+    }
+
+    private Item updateItem(UpdateItemCommand command, String employeeNo) {
         UpdateItemCommand validatedCommand = Objects.requireNonNull(command, "command");
         Item item = getBySku(validatedCommand.sku());
         validateActiveCategory(validatedCommand.categoryCode());
@@ -281,6 +340,7 @@ public class ItemService {
         );
         Item saved = itemRepository.save(item);
         publishSnapshotChangedIfNeeded(saved, nameChanged, unitChanged);
+        userActivityEventPublisher.publish(saved, UserActivityAction.ITEM_UPDATED, employeeNo, null);
         return saved;
     }
 
@@ -306,6 +366,14 @@ public class ItemService {
             key = "T(com.fallguys.itemservice.config.ItemCacheKeys).detail(#result.sku())",
             unless = "#result == null")
     public ItemView updateSelection(UpdateItemSelectionCommand command) {
+        return updateSelection(command, SYSTEM_EMPLOYEE_NO);
+    }
+
+    @Transactional
+    @CachePut(cacheNames = ItemCacheNames.ITEM_DETAIL,
+            key = "T(com.fallguys.itemservice.config.ItemCacheKeys).detail(#result.sku())",
+            unless = "#result == null")
+    public ItemView updateSelection(UpdateItemSelectionCommand command, String employeeNo) {
         UpdateItemSelectionCommand validatedCommand = Objects.requireNonNull(command, "command");
         Item item = getBySku(validatedCommand.sku());
         if (!item.isActive()) {
@@ -328,6 +396,7 @@ public class ItemService {
         );
         Item saved = itemRepository.save(item);
         publishSnapshotChangedIfNeeded(saved, nameChanged, unitChanged);
+        userActivityEventPublisher.publish(saved, UserActivityAction.ITEM_UPDATED, employeeNo, null);
         return findViewBySku(saved.getSku());
     }
 
@@ -350,11 +419,19 @@ public class ItemService {
     @CacheEvict(cacheNames = ItemCacheNames.ITEM_DETAIL,
             key = "T(com.fallguys.itemservice.config.ItemCacheKeys).detail(#sku)")
     public Item activate(String sku) {
+        return activate(sku, SYSTEM_EMPLOYEE_NO);
+    }
+
+    @Transactional
+    @CacheEvict(cacheNames = ItemCacheNames.ITEM_DETAIL,
+            key = "T(com.fallguys.itemservice.config.ItemCacheKeys).detail(#sku)")
+    public Item activate(String sku, String employeeNo) {
         Item item = getBySku(sku);
 
         item.activate(clock.instant());
         Item saved = itemRepository.save(item);
         itemSnapshotEventPublisher.publishChanged(saved);
+        userActivityEventPublisher.publish(saved, UserActivityAction.ITEM_STATUS_CHANGED, employeeNo, ACTIVE_STATUS);
         return saved;
     }
 
@@ -377,11 +454,19 @@ public class ItemService {
     @CacheEvict(cacheNames = ItemCacheNames.ITEM_DETAIL,
             key = "T(com.fallguys.itemservice.config.ItemCacheKeys).detail(#sku)")
     public Item deactivate(String sku) {
+        return deactivate(sku, SYSTEM_EMPLOYEE_NO);
+    }
+
+    @Transactional
+    @CacheEvict(cacheNames = ItemCacheNames.ITEM_DETAIL,
+            key = "T(com.fallguys.itemservice.config.ItemCacheKeys).detail(#sku)")
+    public Item deactivate(String sku, String employeeNo) {
         Item item = getBySku(sku);
 
         item.deactivate(clock.instant());
         Item saved = itemRepository.save(item);
         itemSnapshotEventPublisher.publishChanged(saved);
+        userActivityEventPublisher.publish(saved, UserActivityAction.ITEM_STATUS_CHANGED, employeeNo, INACTIVE_STATUS);
         return saved;
     }
 
@@ -465,6 +550,13 @@ public class ItemService {
 
         @Override
         public void publishChanged(Item item) {
+        }
+    }
+
+    private static class NoopUserActivityEventPublisher implements UserActivityEventPublisher {
+
+        @Override
+        public void publish(Item item, UserActivityAction action, String employeeNo, String status) {
         }
     }
 }
