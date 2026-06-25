@@ -13,6 +13,7 @@ import com.fallguys.itemservice.controller.dto.ItemStatusResponse;
 import com.fallguys.itemservice.controller.dto.ItemUnitResponse;
 import com.fallguys.itemservice.controller.dto.UpdateItemRequest;
 import com.fallguys.itemservice.controller.dto.UpdateItemResponse;
+import com.fallguys.itemservice.controller.security.JwtClaimExtractor;
 import com.fallguys.itemservice.domain.CreateItemCommand;
 import com.fallguys.itemservice.domain.Item;
 import com.fallguys.itemservice.domain.ItemService;
@@ -36,6 +37,8 @@ import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -185,9 +188,13 @@ public class ItemController {
             @ApiResponse(responseCode = "500", description = "서버 내부 오류",
                     content = @Content(schema = @Schema(implementation = ProblemDetail.class)))
     })
-    public ResponseEntity<CreateItemResponse> create(@Valid @RequestBody CreateItemRequest request) {
+    public ResponseEntity<CreateItemResponse> create(
+            @Parameter(hidden = true) @AuthenticationPrincipal Jwt jwt,
+            @Valid @RequestBody CreateItemRequest request
+    ) {
+        String employeeNo = JwtClaimExtractor.extractEmployeeNo(jwt);
         CreateItemCommand command = request.toCommand();
-        ItemView created = itemService.createView(command);
+        ItemView created = itemService.createView(command, employeeNo);
 
         return ResponseEntity.status(HttpStatus.CREATED).body(CreateItemResponse.from(created));
     }
@@ -212,13 +219,15 @@ public class ItemController {
                     content = @Content(schema = @Schema(implementation = ProblemDetail.class)))
     })
     public UpdateItemResponse update(
+            @Parameter(hidden = true) @AuthenticationPrincipal Jwt jwt,
             @Parameter(description = "수정 대상 부품 SKU", example = "HMC-EN-00214")
             @PathVariable String sku,
             @Valid @RequestBody UpdateItemRequest request
     ) {
+        String employeeNo = JwtClaimExtractor.extractEmployeeNo(jwt);
         UpdateItemSelectionCommand command = request.toCommand(sku);
 
-        return UpdateItemResponse.from(itemService.updateSelection(command));
+        return UpdateItemResponse.from(itemService.updateSelection(command, employeeNo));
     }
 
     @PatchMapping("/{sku}/activate")
@@ -243,11 +252,13 @@ public class ItemController {
                     content = @Content(schema = @Schema(implementation = ProblemDetail.class)))
     })
     public ItemStatusResponse activate(
+            @Parameter(hidden = true) @AuthenticationPrincipal Jwt jwt,
             @Parameter(description = "활성 복귀 대상 부품 SKU", example = "HMC-WP-00229")
             @PathVariable String sku
     ) {
+        String employeeNo = JwtClaimExtractor.extractEmployeeNo(jwt);
         String normalizedSku = ItemRequestValidator.requireSku(sku, ItemErrorCode.INVALID_SKU_FORMAT);
-        Item item = itemService.activate(normalizedSku);
+        Item item = itemService.activate(normalizedSku, employeeNo);
 
         return ItemStatusResponse.from(item);
     }
@@ -274,11 +285,13 @@ public class ItemController {
                     content = @Content(schema = @Schema(implementation = ProblemDetail.class)))
     })
     public ItemStatusResponse deactivate(
+            @Parameter(hidden = true) @AuthenticationPrincipal Jwt jwt,
             @Parameter(description = "비활성 전환 대상 부품 SKU", example = "HMC-WP-00229")
             @PathVariable String sku
     ) {
+        String employeeNo = JwtClaimExtractor.extractEmployeeNo(jwt);
         String normalizedSku = ItemRequestValidator.requireSku(sku, ItemErrorCode.INVALID_SKU_FORMAT);
-        Item item = itemService.deactivate(normalizedSku);
+        Item item = itemService.deactivate(normalizedSku, employeeNo);
 
         return ItemStatusResponse.from(item);
     }

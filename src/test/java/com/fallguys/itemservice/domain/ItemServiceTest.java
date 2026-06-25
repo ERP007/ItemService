@@ -33,6 +33,7 @@ class ItemServiceTest {
     private FakeItemRepository itemRepository;
     private FakeItemCategoryRepository itemCategoryRepository;
     private FakeItemSnapshotEventPublisher itemSnapshotEventPublisher;
+    private FakeUserActivityEventPublisher userActivityEventPublisher;
     private ItemService itemService;
 
     @BeforeEach
@@ -40,7 +41,14 @@ class ItemServiceTest {
         itemRepository = new FakeItemRepository();
         itemCategoryRepository = new FakeItemCategoryRepository();
         itemSnapshotEventPublisher = new FakeItemSnapshotEventPublisher();
-        itemService = new ItemService(itemRepository, itemCategoryRepository, itemSnapshotEventPublisher, CLOCK);
+        userActivityEventPublisher = new FakeUserActivityEventPublisher();
+        itemService = new ItemService(
+                itemRepository,
+                itemCategoryRepository,
+                itemSnapshotEventPublisher,
+                userActivityEventPublisher,
+                CLOCK
+        );
     }
 
     @Test
@@ -85,6 +93,7 @@ class ItemServiceTest {
                         8500
                 ))
         );
+        assertTrue(userActivityEventPublisher.calls.isEmpty());
     }
 
     @Test
@@ -103,7 +112,59 @@ class ItemServiceTest {
 
         assertAll(
                 () -> assertEquals("ITM-003", exception.getCode()),
-                () -> assertFalse(itemRepository.existsBySku("ENG-OIL-5W30-1L"))
+                () -> assertFalse(itemRepository.existsBySku("ENG-OIL-5W30-1L")),
+                () -> assertTrue(userActivityEventPublisher.calls.isEmpty())
+        );
+    }
+
+    @Test
+    void publishesUserActivityEventsAfterSuccessfulItemChanges() {
+        itemCategoryRepository.addActiveCategory("ENGINE_OIL");
+        Item created = itemService.create(new CreateItemCommand(
+                "ENG-OIL-5W30-1L",
+                "Engine oil",
+                "ENGINE_OIL",
+                ItemUnit.EA,
+                50,
+                8500
+        ), "ADMIN002");
+        assertAll(
+                () -> assertEquals("ENG-OIL-5W30-1L", created.getSku()),
+                () -> assertEquals(
+                        List.of("ADMIN002:ITEM_CREATED:Engine oil:ENG-OIL-5W30-1L:null"),
+                        userActivityEventPublisher.calls
+                )
+        );
+
+        userActivityEventPublisher.clear();
+        itemCategoryRepository.addRootCategory("ENGINE");
+        itemCategoryRepository.addSubCategory("ENGINE_FILTER", "ENGINE");
+        itemService.updateSelection(new UpdateItemSelectionCommand(
+                "ENG-OIL-5W30-1L",
+                "Oil filter",
+                "ENGINE",
+                "ENGINE_FILTER",
+                ItemUnit.SET,
+                10,
+                12000
+        ), "ADMIN002");
+        assertEquals(
+                List.of("ADMIN002:ITEM_UPDATED:Oil filter:ENG-OIL-5W30-1L:null"),
+                userActivityEventPublisher.calls
+        );
+
+        userActivityEventPublisher.clear();
+        itemService.deactivate("ENG-OIL-5W30-1L", "ADMIN002");
+        assertEquals(
+                List.of("ADMIN002:ITEM_STATUS_CHANGED:Oil filter:ENG-OIL-5W30-1L:비활성"),
+                userActivityEventPublisher.calls
+        );
+
+        userActivityEventPublisher.clear();
+        itemService.activate("ENG-OIL-5W30-1L", "ADMIN002");
+        assertEquals(
+                List.of("ADMIN002:ITEM_STATUS_CHANGED:Oil filter:ENG-OIL-5W30-1L:활성"),
+                userActivityEventPublisher.calls
         );
     }
 
@@ -293,6 +354,7 @@ class ItemServiceTest {
         );
 
         assertEquals("ITM-003", exception.getCode());
+        assertTrue(userActivityEventPublisher.calls.isEmpty());
     }
 
     @Test
@@ -345,7 +407,8 @@ class ItemServiceTest {
 
         assertAll(
                 () -> assertThrows(InvalidItemStatusException.class, () -> itemService.activate("ACTIVE-ITEM")),
-                () -> assertThrows(InvalidItemStatusException.class, () -> itemService.deactivate("INACTIVE-ITEM"))
+                () -> assertThrows(InvalidItemStatusException.class, () -> itemService.deactivate("INACTIVE-ITEM")),
+                () -> assertTrue(userActivityEventPublisher.calls.isEmpty())
         );
     }
 
@@ -593,6 +656,26 @@ class ItemServiceTest {
                     item.getName(),
                     item.getUnit().getCode(),
                     item.isActive()
+            ));
+        }
+    }
+
+    private static class FakeUserActivityEventPublisher implements UserActivityEventPublisher {
+
+        private final List<String> calls = new ArrayList<>();
+
+        void clear() {
+            calls.clear();
+        }
+
+        @Override
+        public void publish(Item item, UserActivityAction action, String employeeNo, String status) {
+            calls.add("%s:%s:%s:%s:%s".formatted(
+                    employeeNo,
+                    action.name(),
+                    item.getName(),
+                    item.getSku(),
+                    status
             ));
         }
     }
